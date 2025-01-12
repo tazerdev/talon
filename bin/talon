@@ -466,7 +466,7 @@ def generate_spectrograph(event: dict, clip_dir: str = 'clips', title: str = "",
         else:
             print('File exists, skipping. Use the --force option to regenerate the spectrograph.')
 
-def generate_frequency_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str):
+def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str):
     """
     Generate a frequency graph of supplied events.
 
@@ -776,6 +776,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip.")
     arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
     arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
+    arg_parser.add_argument('--title', type=str, help="A tile for the time series graph.", default="Detections Over Time")
 
     arg_parser.add_argument('--longitude', type=validate_longitude, default=-122.34930532895686, help="Longitude, in decimal format, of the location.")
     arg_parser.add_argument('--latitude', type=validate_latitude, default=47.620529386334695, help="Latitude, in decimal format, of the location.")
@@ -788,7 +789,7 @@ def ParseCommandLineArguments():
     display = arg_parser.add_mutually_exclusive_group()
     display.add_argument('--labels', action='store_true', help="Generate Audacity labels for each recording.")
     display.add_argument('--summary', action='store_true', help="Display a summary of all data.")
-    display.add_argument('--frequency', default=0, type=int, help="Display a frequency table of all data.")
+    display.add_argument('--timeseries', default=0, type=int, help="Display a graph of events, grouped by the supplied value (in minutes).")
     display.add_argument('--groups', action='store_true', help="Display a summary of all group codes used by Nighthawk")
     display.add_argument('--checklist', action='store_true', help="Create 'checklists' out of the list of detections.")
 
@@ -847,7 +848,7 @@ def main():
             print(f"Invalid value specified for: {e}")
             sys.exit(1)
 
-    # curtz = pytz.timezone(vals['timezone'])
+    curtz = pytz.timezone(vals['timezone'])
 
     taxonomy = {}
     groupcodexref = {}
@@ -970,15 +971,15 @@ def main():
                         title = f"{event['identity']} ({float(event['probability'])*100:-0.2f}%) {event['dt']}\n"
                         title += f"{event['filepath']}"
                         generate_spectrograph(event, 'clips', title, args.force)
-            elif args.frequency > 0:
+            elif args.timeseries > 0:
                 if args.start_date and args.stop_date:
-                    start_dt = args.start_date
-                    stop_dt = args.stop_date
+                    start_dt = curtz.localize(args.start_date)
+                    stop_dt = curtz.localize(args.stop_date)
                 else:
                     start_dt = events[0]['dt']
                     stop_dt = events[-1]['dt']
                 
-                generate_frequency_graph(events, start_dt, stop_dt, args.frequency, "testing")
+                generate_timeseries_graph(events, start_dt, stop_dt, args.timeseries, args.title)
             elif args.labels:
                 generate_audacity_labels(events, args.force)
             elif args.groups:
@@ -1050,3 +1051,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
