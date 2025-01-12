@@ -466,7 +466,7 @@ def generate_spectrograph(event: dict, clip_dir: str = 'clips', title: str = "",
         else:
             print('File exists, skipping. Use the --force option to regenerate the spectrograph.')
 
-def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str):
+def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str, ymax: int):
     """
     Generate a frequency graph of supplied events.
 
@@ -476,6 +476,7 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
         stop_dt (datetime): The stop time of data we wish to grpah.
         frequency (int): The time duration (minutes) we'll lump events into for the graph. 
         title (str): The title of the graph.
+        ymax (int): Maximum height of the chart (minimum is the bucket with the most events)
     """
     import math
     import seaborn as sns
@@ -486,7 +487,7 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
     buckets = []
     totals = []
     labels = []
-    max_value = 0
+    max_value = ymax
 
     if DEBUG:
         print(f"start: {start_dt}, stop: {stop_dt}")
@@ -535,6 +536,7 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
         if i > max_value:
             max_value = math.ceil(i / 10.0) * 10
 
+    title += f"\n{start_dt.strftime('%m/%d/%Y %H:%M:%S %Z')} - {stop_dt.strftime('%m/%d/%Y %H:%M:%S %Z')}"
     sns.set_theme()
     custom_palette = ["#444499", "#FFFFFF", "#44A500"]
     sns.set_theme(style="whitegrid", palette="pastel")
@@ -776,7 +778,8 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip.")
     arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
     arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
-    arg_parser.add_argument('--title', type=str, help="A tile for the time series graph.", default="Detections Over Time")
+    arg_parser.add_argument('--title', type=str, help="A tile for the time series graph.", default="Detection Chart for Date Range:")
+    arg_parser.add_argument('--y-axis-max', default=0, type=int, help="Maximum height of the y-axis for the time series chart, the max total for any bucket will take precedence over this value.")
 
     arg_parser.add_argument('--longitude', type=validate_longitude, default=-122.34930532895686, help="Longitude, in decimal format, of the location.")
     arg_parser.add_argument('--latitude', type=validate_latitude, default=47.620529386334695, help="Latitude, in decimal format, of the location.")
@@ -820,7 +823,9 @@ def main():
         'region': args.region,
         'name': args.name,
         'location': args.location,
-        'filter': args.filter
+        'filter': args.filter,
+        'title': args.title,
+        'y-axis-max': args.y_axis_max
     }
 
     # read values from a config file instead, if we can't read all values
@@ -838,6 +843,8 @@ def main():
             vals['name'] = config['location']['name']
             vals['location'] = config['ebird']['location']
             vals['filter'] = config['general']['filter']
+            vals['title'] = config['chart']['title']
+            vals['y-axis-max'] = int(config['chart']['y-axis-max'])
         except configparser.MissingSectionHeaderError as e:
             print(f"The supplied config file contains no section headers, thus can not be used.")
             sys.exit(1)
@@ -979,7 +986,7 @@ def main():
                     start_dt = events[0]['dt']
                     stop_dt = events[-1]['dt']
                 
-                generate_timeseries_graph(events, start_dt, stop_dt, args.timeseries, args.title)
+                generate_timeseries_graph(events, start_dt, stop_dt, args.timeseries, vals['title'], vals['y-axis-max'])
             elif args.labels:
                 generate_audacity_labels(events, args.force)
             elif args.groups:
@@ -1040,7 +1047,9 @@ def main():
         else:
             output = "No events found.\n"
 
-        print(output.rstrip())
+        if len(output) > 0:
+            print(output.rstrip())
+
         sys.stdout.flush()
     except BrokenPipeError:
         # Python flushes standard streams on exit; redirect remaining output
