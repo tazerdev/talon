@@ -217,6 +217,11 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
                 try:
                     delta = timedelta(seconds=float(det['start']))
                     abstime = metadata['start_dt'] + delta
+                    
+                    # add relative, to the wav file, start time
+                    mins, secs = divmod(float(det['start']), 60)
+                    hours, mins = divmod(mins, 60)
+                    start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
 
                     events.append(
                         { 
@@ -226,6 +231,7 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
                             'engine': 'bn',
                             'filepath': wavfile,
                             'start': float(det['start']),
+                            'start_rel': start_rel,
                             'end': float(det['end']),
                             'common_name': det['common_name'],
                             'debug': ''
@@ -246,6 +252,11 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
                     delta = timedelta(seconds=float(det['start_sec']))
                     abstime = metadata['start_dt'] + delta
 
+                    # add relative, to the wav file, start time
+                    mins, secs = divmod(float(det['start_sec']), 60)
+                    hours, mins = divmod(mins, 60)
+                    start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
+                    
                     if det['predicted_category'] in taxonomy:
                         common_name = taxonomy[det['predicted_category']]
                     else:
@@ -259,6 +270,7 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
                             'engine': 'nh',
                             'filepath': wavfile,
                             'start': float(det['start_sec']),
+                            'start_rel': start_rel,
                             'end': float(det['end_sec']),
                             'common_name': common_name,
                             'debug': ''
@@ -1038,9 +1050,9 @@ def main():
                 # print detail for all remaining events
                 for event in events:
                     if event['engine'] == 'nh':
-                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['probability']*100:-5.2f}%  {event['engine']}  {event['protocol']}  {event['common_name']} ({event['identity']})\n"
+                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-5.2f}%  {event['engine']}  {event['protocol']}  {event['common_name']} ({event['identity']})\n"
                     else:
-                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['probability']*100:-5.2f}%  {event['engine']}  {event['protocol']}  {event['identity']}\n"
+                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-5.2f}%  {event['engine']}  {event['protocol']}  {event['identity']}\n"
 
                     if DEBUG:
                         output += event['debug'] + '\n'
