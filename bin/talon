@@ -309,7 +309,7 @@ def classify_events(events: list, curloc: dict):
 
             important_dates[curdate]['midnight'] = curtz.localize(dt.combine(curdate, datetime.time(0,0,0)).replace(microsecond=0))
             important_dates[curdate]['astrodawn'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
-            important_dates[curdate]['astrodusk'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
+            important_dates[curdate]['astrodusk'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dusk'].replace(microsecond=0)
             important_dates[curdate]['tomorrow'] = important_dates[curdate]['midnight'] + timedelta(seconds=86400)
 
         if DEBUG:
@@ -327,6 +327,7 @@ def classify_events(events: list, curloc: dict):
         # astrodawn/astrodusk are calculated for the day of each event, which means
         # we're comparing against a non-contiguous range of time (e.g., the end of
         # last night or the beginning of tonight)
+
         if eventtime >= important_dates[curdate]['astrodusk'] or eventtime < important_dates[curdate]['astrodawn']:
             event['protocol'] = "nfc"
         else:
