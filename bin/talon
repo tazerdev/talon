@@ -296,66 +296,41 @@ def classify_events(events: list, curloc: dict):
 
     curtz = pytz.timezone(curloc['timezone'])
 
+    important_dates = {}
+
     for event in events:
         curdate = event['dt'].date()
-
-        location=LocationInfo(name=curloc['name'], region=curloc['region'], timezone=curloc['timezone'], latitude=curloc['latitude'], longitude=curloc['longitude'])
-
-        # AstronomicalDusk = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=pytz.utc)['dusk'].replace(microsecond=0)
-        # AstronomicalDawn = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=pytz.utc)['dawn'].replace(microsecond=0)
-        # AstronomicalDuskLocal = AstronomicalDusk.astimezone(curtz)
-        # AstronomicalDawnLocal = AstronomicalDawn.astimezone(curtz)
-        # MidnightLocal = curtz.localize(dt.combine(curdate, datetime.time(0,0,0))).replace(microsecond=0)
-        # TomorrowLocal = MidnightLocal + timedelta(seconds=86400)
-        # eventtime = event['dt']
-        # eventtime_utc = event['dt'].astimezone(pytz.utc)
-        # Midnight = MidnightLocal.astimezone(pytz.utc)
-        # Tomorrow = TomorrowLocal.astimezone(pytz.utc)
-
-        AstronomicalDusk = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dusk'].replace(microsecond=0)
-        AstronomicalDawn = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
-        Midnight = curtz.localize(dt.combine(curdate, datetime.time(0,0,0)).replace(microsecond=0))
-        Tomorrow = Midnight + timedelta(seconds=86400)
-
-        # AstronomicalDuskLocal = AstronomicalDusk.astimezone(curtz)
-        # AstronomicalDawnLocal = AstronomicalDawn.astimezone(curtz)
-
-        # MidnightLocal = curtz.localize(dt.combine(curdate, datetime.time(0,0,0))).replace(microsecond=0)
-        # TomorrowLocal = MidnightLocal + timedelta(seconds=86400)
-        
         eventtime = event['dt']
-        # eventtime_utc = event['dt'].astimezone(pytz.utc)
-        # Midnight = MidnightLocal.astimezone(pytz.utc)
-        # Tomorrow = TomorrowLocal.astimezone(pytz.utc)
+
+        if curdate not in important_dates:
+            location=LocationInfo(name=curloc['name'], region=curloc['region'], timezone=curloc['timezone'], latitude=curloc['latitude'], longitude=curloc['longitude'])
+
+            important_dates[curdate] = {}
+
+            important_dates[curdate]['midnight'] = curtz.localize(dt.combine(curdate, datetime.time(0,0,0)).replace(microsecond=0))
+            important_dates[curdate]['astrodawn'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
+            important_dates[curdate]['astrodusk'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
+            important_dates[curdate]['tomorrow'] = important_dates[curdate]['midnight'] + timedelta(seconds=86400)
 
         if DEBUG:
             event['debug']  = 'Local:\n'
             event['debug'] += f"Event     : {eventtime}\n"
-            event['debug'] += f"Midnight  : {Midnight}\n"
-            event['debug'] += f"AstroDawn : {AstronomicalDawn}\n"
-            event['debug'] += f"AstroDusk : {AstronomicalDusk}\n"
-            event['debug'] += f"Tomorrow  : {Tomorrow}\n\n"
+            event['debug'] += f"Midnight  : {important_dates[curdate]['midnight']}\n"
+            event['debug'] += f"AstroDawn : {important_dates[curdate]['astrodawn']}\n"
+            event['debug'] += f"AstroDusk : {important_dates[curdate]['astrodusk']}\n"
+            event['debug'] += f"Tomorrow  : {important_dates[curdate]['tomorrow']}\n\n"
 
-            # event['debug'] += 'Local:\n'
-            # event['debug'] += f"Event     : {eventtime}\n"
-            # event['debug'] += f"Midnight  : {MidnightLocal}\n"
-            # event['debug'] += f"AstroDawn : {AstronomicalDawnLocal}\n"
-            # event['debug'] += f"AstroDusk : {AstronomicalDuskLocal}\n"
-            # event['debug'] += f"Tomorrow  : {TomorrowLocal}\n"
+            event['debug'] += f"{eventtime} >= {important_dates[curdate]['astrodusk']} = {eventtime >= important_dates[curdate]['astrodusk']} or\n"
+            event['debug'] += f"{eventtime} < {important_dates[curdate]['astrodawn']} = {eventtime < important_dates[curdate]['astrodawn']}\n"
 
-            event['debug'] += f"{eventtime} >= {AstronomicalDusk} = {eventtime >= AstronomicalDusk} or\n"
-            event['debug'] += f"{eventtime} < {AstronomicalDawn} = {eventtime < AstronomicalDawn}\n"
-
-        # if (eventtime > MidnightLocal and eventtime < AstronomicalDawnLocal) or (eventtime >= AstronomicalDuskLocal and eventtime < TomorrowLocal):
+        # if (eventtime > MidnightLocal and eventtime < important_dates['astrodawn']) or (eventtime >= important_dates['astrodusk'] and eventtime < TomorrowLocal):
         # astrodawn/astrodusk are calculated for the day of each event, which means
         # we're comparing against a non-contiguous range of time (e.g., the end of
         # last night or the beginning of tonight)
-        if eventtime >= AstronomicalDusk or eventtime < AstronomicalDawn:
-            protocol = "nfc"
+        if eventtime >= important_dates[curdate]['astrodusk'] or eventtime < important_dates[curdate]['astrodawn']:
+            event['protocol'] = "nfc"
         else:
-            protocol = "day"
-
-        event['protocol'] = protocol
+            event['protocol'] = "day"
 
 def extract_clip(event: dict, clip_dir: str = 'clips', force: bool = False):
     """
