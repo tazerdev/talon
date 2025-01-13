@@ -787,7 +787,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-n', '--nh-threshold', default=0.85, type=float, help="Only generate labels for detections above this probability level.")
 
     arg_parser.add_argument('--clip', action='store_true', help="Extract audio clips for each detection.")
-    arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip.")
+    arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip (implies --clip).")
     arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
     arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
     arg_parser.add_argument('--title', type=str, help="A tile for the time series graph.", default="Detection Chart for Date Range:")
@@ -981,9 +981,10 @@ def main():
 
                 output += '-' * 20 + '\n'
                 output += f"{event_total:4d}  Total"
+            # extract clips and generate graphs, note that --graph implies --clip
             elif not args.checklist and (args.clip or args.graph):
                 for event in events:
-                    if args.clip:
+                    if args.clip or args.graph:
                         extract_clip(event, 'clips', args.force)
                     
                     if args.graph:
