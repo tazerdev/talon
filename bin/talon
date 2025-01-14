@@ -750,42 +750,42 @@ def generate_summary(events: dict):
     return output
 
 def ParseCommandLineArguments():
-    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="talon is a tool for ...")
-    arg_parser.add_argument('--config', default="./talon.ini", type=str, help="Path to the a configuration file.")
+    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="talon is a tool for processing Nighthawk and BirdNET detection files.")
+    arg_parser.add_argument('--config', default="/opt/talon/etc/talon.ini", type=str, help="Path to a configuration file.")
 
     arg_parser.add_argument('-p', '--path', default=".", type=str, help="Directory or file to parse.")
     arg_parser.add_argument('-r', '--recurse', action='store_true', help="Recursively descend into sub-directories looking for additional files.")
 
-    arg_parser.add_argument('--protocol', default='all', choices=['all', 'nfc', 'day'], help="The protocol (embedded in the file name) you wish to exclusively consider.")
-    arg_parser.add_argument('-e', '--engine', default='all', choices=['all', 'bn', 'nh'], help="The analysis engine whose results you wish to exclusively process.")
+    arg_parser.add_argument('--protocol', default='all', choices=['all', 'nfc', 'noc', 'day',], help="The eBird protocol whose results you wish to return.")
+    arg_parser.add_argument('-e', '--engine', default='all', choices=['all', 'bn', 'nh'], help="The analysis engine whose results you wish to return.")
     arg_parser.add_argument('--filter', default="filter.csv", type=str, help="Path to a text file containing names of species to exclude from any results.")
-    arg_parser.add_argument('-i', '--identity', default="all", nargs='+', help="Common name of birds (e.g., woothr, Barn Owl, etc) you wish to work with.")
-    arg_parser.add_argument('-b', '--bn-threshold', default=0.75, type=float, help="Only generate labels for detections above this probability level.")
-    arg_parser.add_argument('-n', '--nh-threshold', default=0.85, type=float, help="Only generate labels for detections above this probability level.")
+    arg_parser.add_argument('-i', '--identity', default="all", nargs='+', help="Common name of a bird (e.g., woothr, Barn Owl, etc) you wish to work with.")
+    arg_parser.add_argument('-b', '--bn-threshold', default=0.75, type=float, help="Only generate labels for BirdNET detections above this probability level.")
+    arg_parser.add_argument('-n', '--nh-threshold', default=0.85, type=float, help="Only generate labels for Nighthawk detections above this probability level.")
 
-    arg_parser.add_argument('--clip', action='store_true', help="Extract audio clips for each detection.")
+    arg_parser.add_argument('--clip', action='store_true', help="Extract audio clips of results.")
     arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip (implies --clip).")
     arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
     arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
-    arg_parser.add_argument('--title', type=str, help="A tile for the time series graph.", default="Detection Chart for Date Range:")
-    arg_parser.add_argument('--y-axis-max', default=0, type=int, help="Maximum height of the y-axis for the time series chart, the max total for any bucket will take precedence over this value.")
+    arg_parser.add_argument('--title', type=str, help="A title for the time-series graph.", default="Detection Chart for Date Range:")
+    arg_parser.add_argument('--y-axis-max', default=0, type=int, help="Maximum height of the y-axis for the time-series chart, the max total for any bucket will take precedence over this value.")
 
-    arg_parser.add_argument('--longitude', type=validate_longitude, default=-122.34930532895686, help="Longitude, in decimal format, of the location.")
-    arg_parser.add_argument('--latitude', type=validate_latitude, default=47.620529386334695, help="Latitude, in decimal format, of the location.")
-    arg_parser.add_argument('--timezone', type=validate_timezone, default="US/Pacific", help="Timezone of the location.")
-    arg_parser.add_argument('--region', type=str, default="USA", help="Region of the location.")
-    arg_parser.add_argument('--name', type=str, default="King, WA", help="A descriptive name of the location.")
+    arg_parser.add_argument('--longitude', type=validate_longitude, default=-122.34930532895686, help="Longitude, in decimal format, of the location where the audio was recorded.")
+    arg_parser.add_argument('--latitude', type=validate_latitude, default=47.620529386334695, help="Latitude, in decimal format, of the location where the audio was recorded.")
+    arg_parser.add_argument('--timezone', type=validate_timezone, default="US/Pacific", help="Timezone of the location where the audio was recorded.")
+    arg_parser.add_argument('--region', type=str, default="USA", help="Region of the location where the audio was recorded")
+    arg_parser.add_argument('--name', type=str, default="King, WA", help="A descriptive name of the location where the audio was recorded")
 
     arg_parser.add_argument('--location', type=str, default="Space Needle", help="The name of an ebird location or hotspot for your NFC station.")
 
     display = arg_parser.add_mutually_exclusive_group()
-    display.add_argument('--labels', action='store_true', help="Generate Audacity labels for each recording.")
-    display.add_argument('--summary', action='store_true', help="Display a summary of all data.")
+    display.add_argument('--labels', action='store_true', help="Generate Audacity labels of the selected data for all files.")
+    display.add_argument('--summary', action='store_true', help="Display a summary of the selected data.")
     display.add_argument('--timeseries', default=0, type=int, help="Display a graph of events, grouped by the supplied value (in minutes).")
     display.add_argument('--groups', action='store_true', help="Display a summary of all group codes used by Nighthawk")
-    display.add_argument('--checklist', action='store_true', help="Create 'checklists' out of the list of detections.")
+    display.add_argument('--checklist', action='store_true', help="Create pseudo 'checklists' out of the selected data.")
 
-    arg_parser.add_argument('-f', '--force', action='store_true', help="Force the regenerate of lables or clips if they already exist.")
+    arg_parser.add_argument('-f', '--force', action='store_true', help="Force the recreation of lables, clips, or graphs if they already exist.")
     arg_parser.add_argument('-d', '--debug', action='store_true', help="Display information which may be helpful for debugging.")
     arg_parser.add_argument('-v', '--verbose', action='store_true', help="Display more information about what talon is doing.")
 
