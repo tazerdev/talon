@@ -839,13 +839,13 @@ def main():
             vals['ebird_tax'] = config['general']['ebird_taxonomy']
             vals['group_xrf'] = config['general']['group_code_xref']
         except configparser.MissingSectionHeaderError as e:
-            print(f"The supplied config file contains no section headers, thus can not be used.")
+            print(f"Error parsing config, the supplied config file contains no section headers.")
             sys.exit(1)
         except KeyError as e:
-            print(f"Unable to find key: {e}")
-            sys.exit(1)
+            if DEBUG:
+                print(f"Error parsing config, unable to find key: {e}, using commandline arguments instead (if available.)")
         except argparse.ArgumentTypeError as e:
-            print(f"Invalid value specified for: {e}")
+            print(f"Error parsing config, invalid value specified for: {e}")
             sys.exit(1)
 
     curtz = pytz.timezone(vals['timezone'])
