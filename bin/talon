@@ -814,7 +814,9 @@ def main():
         'location': args.location,
         'filter': args.filter,
         'title': args.title,
-        'y-axis-max': args.y_axis_max
+        'y-axis-max': args.y_axis_max,
+        'ebird_tax': './eBird_taxonomy_v2024.csv',
+        'group_xrf': './group_code_xref.csv'
     }
 
     # read values from a config file instead, if we can't read all values
@@ -834,6 +836,8 @@ def main():
             vals['filter'] = config['general']['filter']
             vals['title'] = config['chart']['title']
             vals['y-axis-max'] = int(config['chart']['y-axis-max'])
+            vals['ebird_tax'] = config['general']['ebird_taxonomy']
+            vals['group_xrf'] = config['general']['group_code_xref']
         except configparser.MissingSectionHeaderError as e:
             print(f"The supplied config file contains no section headers, thus can not be used.")
             sys.exit(1)
@@ -848,17 +852,35 @@ def main():
 
     taxonomy = {}
     groupcodexref = {}
-    
-    if os.path.exists('eBird_taxonomy_v2024.csv'):
-        with open('eBird_taxonomy_v2024.csv', mode='r') as infile:
-            reader = csv.reader(infile)
-            taxonomy = { rows[2]:rows[4] for rows in reader }
+
+    # check path listed in ini file first, then in the cwd
+    # then finally in the dir created by pyinstaller
+    ebird_tax = [
+        vals['ebird_tax'],
+        '_internal/eBird_taxonomy_v2024.csv'
+    ]
+
+    group_xrf = [
+        vals['group_xrf'],
+        '_internal/group_code_xref.csv'
+    ]
 
     # load common names and group code cross-reference
-    if os.path.exists('group_code_xref.csv'):
-        with open('group_code_xref.csv', mode='r') as infile:
-            reader = csv.reader(infile)
-            groupcodexref = { rows[0]:rows[1] for rows in reader }
+    for i in ebird_tax:
+        if os.path.exists(i):
+            with open(i, mode='r') as infile:
+                reader = csv.reader(infile)
+                taxonomy = { rows[2]:rows[4] for rows in reader }
+            
+            break
+
+    for i in group_xrf:
+        if os.path.exists(i):
+            with open(i, mode='r') as infile:
+                reader = csv.reader(infile)
+                groupcodexref = { rows[0]:rows[1] for rows in reader }
+            
+            break
 
     taxonomy = taxonomy | groupcodexref
 
@@ -904,8 +926,8 @@ def main():
                 events = [d for d in events if d['identity'] in args.identity]
             else:
                 # load a list of identites to exclude from disk
-                if os.path.exists(args.filter):
-                    with open(args.filter) as f:
+                if os.path.exists(vals['filter']):
+                    with open(vals['filter']) as f:
                         filter = f.read()
 
                     filter = filter.splitlines()
