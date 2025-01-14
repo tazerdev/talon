@@ -308,6 +308,8 @@ def classify_events(events: list, curloc: dict):
             important_dates[curdate]['astrodawn'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
             important_dates[curdate]['astrodusk'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dusk'].replace(microsecond=0)
             important_dates[curdate]['tomorrow'] = important_dates[curdate]['midnight'] + timedelta(seconds=86400)
+            important_dates[curdate]['sunset'] = sun(location.observer, date=curdate, tzinfo=curtz)['sunset'].replace(microsecond=0) + timedelta(minutes=20)
+            important_dates[curdate]['sunrise'] = sun(location.observer, date=curdate, tzinfo=curtz)['sunrise'].replace(microsecond=0) - timedelta(minutes=40)
 
         if DEBUG:
             event['debug']  = 'Local:\n'
@@ -320,13 +322,14 @@ def classify_events(events: list, curloc: dict):
             event['debug'] += f"{eventtime} >= {important_dates[curdate]['astrodusk']} = {eventtime >= important_dates[curdate]['astrodusk']} or\n"
             event['debug'] += f"{eventtime} < {important_dates[curdate]['astrodawn']} = {eventtime < important_dates[curdate]['astrodawn']}\n"
 
-        # if (eventtime > MidnightLocal and eventtime < important_dates['astrodawn']) or (eventtime >= important_dates['astrodusk'] and eventtime < TomorrowLocal):
         # astrodawn/astrodusk are calculated for the day of each event, which means
         # we're comparing against a non-contiguous range of time (e.g., the end of
         # last night or the beginning of tonight)
-
-        if eventtime >= important_dates[curdate]['astrodusk'] or eventtime < important_dates[curdate]['astrodawn']:
-            event['protocol'] = "nfc"
+        if eventtime >= important_dates[curdate]['sunset'] or eventtime < important_dates[curdate]['sunrise']:
+            if eventtime >= important_dates[curdate]['astrodusk'] or eventtime < important_dates[curdate]['astrodawn']:
+                event['protocol'] = "nfc"
+            else:
+                event['protocol'] = "noc"
         else:
             event['protocol'] = "day"
 
