@@ -443,11 +443,12 @@ def generate_spectrograph(event: dict, clip_dir: str = 'clips', title: str = "",
 
             # configure spectrogram
             plt.figure(figsize=(15, 10), dpi=200)
-            # plt.margins(.50)
+
             librosa.display.specshow(D, sr=sr, x_axis='time', y_axis='linear', cmap='gray_r', hop_length=hl)
             plt.title(title)
             plt.xlabel('Time (s)')
             plt.ylabel('Frequency (Hz)')
+
             # Save spectrogram as image
             plt.savefig(outfile, bbox_inches='tight', pad_inches=0.5)
             plt.close()
@@ -1049,4 +1050,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
