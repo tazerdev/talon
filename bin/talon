@@ -818,7 +818,7 @@ def main():
     }
 
     # read values from a config file instead, if we can't read all values
-    # from the config file, then exist so we're not using a mix of cli and
+    # from the config file, then exit so we're not using a mix of cli and
     # config values
     if os.path.exists(args.config):
         try:
