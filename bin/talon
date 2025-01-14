@@ -136,10 +136,6 @@ def signal_handler(signum, frame):
     signal.signal(signum, signal.SIG_IGN)
     sys.exit(0)
 
-# TODO: support acquiring metadata in different ways:
-#   * from a GUANO WAV header
-#   * from a talon JSON file
-#   * from a 
 def get_metadata(wavfile: str, timezone: str):
     """
     Retrieves metadata from the supplied file.
@@ -201,13 +197,10 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
     bn_file = os.path.join(curpath, filename + bn_ext)
     nh_file = os.path.join(curpath, filename + nh_ext)
 
-    # TODO:
-    # right now we assume get_metadata returns valid results but it migt not. 
-    # should we bother returning any data if it doesn't have an aboslute
-    # start date and time? results might get confusing if we do.
     metadata = get_metadata(wavfile, timezone)
 
     if 'start_dt' in metadata:
+        # process birdnet detections
         if os.path.exists(bn_file):
             with open(bn_file) as f:
                 bn_tmp = [{k: v for k, v in row.items()}
@@ -242,6 +235,7 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
                     print(metadata)
                     print(det)
 
+        # process nighthawk detections
         if os.path.exists(nh_file):
             with open(nh_file) as f:
                 nh_tmp = [{k: v for k, v in row.items()}
@@ -257,6 +251,9 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
                     hours, mins = divmod(mins, 60)
                     start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
                     
+                    # nighthawk uses ebird taxonomy codes as well as custom group
+                    # codes, we'll cross-reference them here to ensure conformity
+                    # with birdnet results
                     if det['predicted_category'] in taxonomy:
                         common_name = taxonomy[det['predicted_category']]
                     else:
