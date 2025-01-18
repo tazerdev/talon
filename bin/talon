@@ -927,7 +927,7 @@ def main():
             # if an identity was specified we don't need to waste time loading the filter
             # table from disk, just limit to what the user supplied
             if args.identity != 'all':
-                events = [d for d in events if d['identity'] in args.identity]
+                events = [d for d in events if d['common_name'] in args.identity]
             else:
                 # load a list of identites to exclude from disk
                 if os.path.exists(vals['filter']):
@@ -939,7 +939,7 @@ def main():
                     filter = []
 
                 # filter out the identities loaded from disk
-                events = [d for d in events if d['identity'] not in filter]
+                events = [d for d in events if d['common_name'] not in filter]
 
             # limit events to protocol, if requested
             if args.protocol != 'all':
@@ -991,7 +991,7 @@ def main():
                         extract_clip(event, 'clips', args.force)
                     
                     if args.graph:
-                        title = f"{event['identity']} ({float(event['probability'])*100:-0.2f}%) {event['dt']}\n"
+                        title = f"{event['common_name']} ({float(event['probability'])*100:-0.2f}%) {event['dt']}\n"
                         title += f"{event['filepath']}"
                         generate_spectrograph(event, 'clips', title, args.force)
             elif args.timeseries > 0:
@@ -1045,7 +1045,7 @@ def main():
 
                             if args.graph:
                                 # plot title
-                                title = f"{event['identity']} ({event['probability']*100:-5.2f}%) {event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}\n"
+                                title = f"{event['common_name']} ({event['probability']*100:-5.2f}%) {event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}\n"
                                 filename, filepath = os.path.split(event['filepath'])
                                 title += f"{filename}"
 
