@@ -758,7 +758,7 @@ def ParseCommandLineArguments():
 
     arg_parser.add_argument('--protocol', default='all', choices=['all', 'nfc', 'noc', 'day',], help="The eBird protocol whose results you wish to return.")
     arg_parser.add_argument('-e', '--engine', default='all', choices=['all', 'bn', 'nh'], help="The analysis engine whose results you wish to return.")
-    arg_parser.add_argument('--filter', default="filter.csv", type=str, help="Path to a text file containing names of species to exclude from any results.")
+    arg_parser.add_argument('--filter', type=str, help="Path to a text file containing names of species to exclude from any results.")
     arg_parser.add_argument('-i', '--identity', default="all", nargs='+', help="Common name of a bird (e.g., woothr, Barn Owl, etc) you wish to work with.")
     arg_parser.add_argument('-b', '--bn-threshold', default=0.75, type=float, help="Only generate labels for BirdNET detections above this probability level.")
     arg_parser.add_argument('-n', '--nh-threshold', default=0.85, type=float, help="Only generate labels for Nighthawk detections above this probability level.")
@@ -812,7 +812,6 @@ def main():
         'region': args.region,
         'name': args.name,
         'location': args.location,
-        'filter': args.filter,
         'title': args.title,
         'y-axis-max': args.y_axis_max,
         'ebird_tax': './eBird_taxonomy_v2024.csv',
@@ -847,6 +846,11 @@ def main():
         except argparse.ArgumentTypeError as e:
             print(f"Error parsing config, invalid value specified for: {e}")
             sys.exit(1)
+
+    if args.filter is not None:
+        vals['filter'] = args.filter
+    elif os.path.exists('filter.csv'):
+        vals['filter'] = 'filter.csv'
 
     curtz = pytz.timezone(vals['timezone'])
 
