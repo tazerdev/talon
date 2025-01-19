@@ -154,10 +154,10 @@ def get_metadata(wavfile: str, timezone: str):
     filename, extension = os.path.splitext(filename)
 
     try:
-        if filename.find('-'):
-            fparsed = filename.split('-')
+        if filename.find('_'):
+            fparsed = filename.split('_')
             id = fparsed[0]
-            start_dt = curtz.localize(dt.strptime(f"{fparsed[2]} {fparsed[3]}", '%Y%m%d %H%M%S'))
+            start_dt = dt.strptime(f"{fparsed[1]} {fparsed[2]}", '%Y%m%d %H%M%S%z')
 
         metadata['id'] = id
         metadata['wav'] = wavfile
