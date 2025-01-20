@@ -132,6 +132,10 @@ def record_post(metadata):
         if os.path.exists(metadata['json']):
             os.remove(metadata['json'])
 
+    # we're done, remove the lock
+    if os.path.exists(metadata['wave'] + '.LCK'):
+        os.remove(metadata['wave'] + '.LCK')
+
 def ParseCommandLineArguments():
     arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="Talon recording scheduler.")
     arg_parser.add_argument('--config', default="/opt/talon/etc/talon.ini", type=str, help="Path to a configuration file.")
@@ -261,6 +265,11 @@ def main():
             with open(vals['json'], 'w') as f:
                 json.dump(vals, f, indent=4, sort_keys=True, default=str)
 
+            # create a lock file so the transfer app knows not
+            # to touch it.
+            with open(vals['wave'] + '.LCK', 'w') as f:
+                f.write(str(os.getpid()))
+
             # setup and start the recording thread
             t1=threading.Thread(target=record, args=([callback]))
             t1.start()
@@ -300,6 +309,11 @@ def main():
                 # setup and start the recording thread
                 # ensure the event flag is cleared in case this isn't our first time around
                 tev.clear()
+
+                # create a lock file so the transfer app knows not
+                # to touch it.
+                with open(vals['wave'] + '.LCK', 'w') as f:
+                    f.write(str(os.getpid()))
 
                 t1=threading.Thread(target=record, args=([callback]))
                 t1.start()
