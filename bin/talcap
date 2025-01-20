@@ -28,7 +28,8 @@ def signal_handler(signum, frame):
     tev.set()
 
     time.sleep(1)
-    record_post()
+
+    record_post(vals.copy())
 
     sys.exit(0)
 
@@ -88,39 +89,39 @@ def record(callback):
                 if tev.is_set():
                     break
 
-def record_post():
+def record_post(metadata):
     """
     Writes metadata to WAV file after the recording is finished.
     """
     try:
         if debug:
-            print(f"[{datetime.now()}] Writing GUANO data to {vals['wave']}")
+            print(f"[{datetime.now()}] Writing GUANO data to {metadata['wave']}")
 
         # caculate actual duration
-        if os.path.exists(vals['wave']):
-            infile = wave.open(vals['wave'])
+        if os.path.exists(metadata['wave']):
+            infile = wave.open(metadata['wave'])
 
         rate = infile.getframerate()
         infile.setpos(0)
         nfr = infile.getnframes()
-        vals['duration'] = nfr / rate
+        metadata['duration'] = nfr / rate
 
         infile.close()
 
         # write guano header
-        g = guano.GuanoFile(vals['wave'])
-        g['loc position'] = f"{vals['latitude']} {vals['longitude']}"
-        g['timestamp'] = vals['start'].isoformat()
-        g['original filename'] = vals['wave']
-        g['length'] = vals['duration']
-        g['samplerate'] = vals['rate']
-        g['TA|station'] = vals['name']
-        g['TA|moonphase'] = vals['moonphase']
-        g['TA|timezone'] = vals['timezone']
-        g['TA|format'] = vals['format']
-        g['TA|channels'] = vals['channels']
-        g['TA|device'] =  vals['device']
-        g['TA|copyright'] = vals['copyright']
+        g = guano.GuanoFile(metadata['wave'])
+        g['loc position'] = f"{metadata['latitude']} {metadata['longitude']}"
+        g['timestamp'] = metadata['start'].isoformat()
+        g['original filename'] = metadata['wave']
+        g['length'] = metadata['duration']
+        g['samplerate'] = metadata['rate']
+        g['TA|station'] = metadata['name']
+        g['TA|moonphase'] = metadata['moonphase']
+        g['TA|timezone'] = metadata['timezone']
+        g['TA|format'] = metadata['format']
+        g['TA|channels'] = metadata['channels']
+        g['TA|device'] =  metadata['device']
+        g['TA|copyright'] = metadata['copyright']
 
         g.write(make_backup=False)
     except Exception as e:
@@ -128,8 +129,8 @@ def record_post():
     else:
         # if the guano header was written successfully
         # then discard the json file
-        if os.path.exists(vals['json']):
-            os.remove(vals['json'])
+        if os.path.exists(metadata['json']):
+            os.remove(metadata['json'])
 
 def ParseCommandLineArguments():
     arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="Talon recording scheduler.")
@@ -272,7 +273,8 @@ def main():
             # otherwise we'll get a device in use exception
             t1.join()
 
-            record_post()
+            t2=threading.Thread(target=record_post, args=(vals.copy(),))
+            t2.start()
 
             while True:
                 # calculate moon phase
@@ -310,7 +312,9 @@ def main():
                 # otherwise we'll get a device in use exception
                 t1.join()
 
-                record_post()
+                metadata = vals.copy()
+                t2=threading.Thread(target=record_post, args=(vals.copy(),))
+                t2.start()
 
         except Exception as e:
             sys.exit(type(e).__name__ + ': ' + str(e))
