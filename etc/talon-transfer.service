@@ -1,0 +1,9 @@
+[Unit]
+Description=Talon Transfer Service
+After=network-online.target
+
+[Service]
+ExecStart=/opt/talon/bin/talxfer.py
+
+[Install]
+WantedBy=multi-user.target

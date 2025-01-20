@@ -1,0 +1,8 @@
+[Unit]
+Description=Talon Audio Capture Service
+
+[Service]
+ExecStart=/opt/talon/bin/talcap -d 0 -c 2
+
+[Install]
+WantedBy=multi-user.target
