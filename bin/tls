@@ -255,7 +255,8 @@ def main():
     wavs = sorted(wavs, key=lambda d: d['start'])
 
     for md in wavs:
-        print(f"{md['wave']}  {md['start'].strftime('%Y%m%d-%H%M%S%z')}  {md['duration']:7.2f}  {md['rate']:5d}  {md['channels']:1d}  {md['format']:6}  {md['latitude']:8.5f}, {md['longitude']:8.5f}  {md['nfc']*1}  {md['nighthawk']*1}  {md['birdnet']*1}")
+        format = md['format'].replace('PCM_', '')
+        print(f"{md['wave']}  {md['start'].strftime('%Y%m%d-%H%M%S%z')}  {md['duration']:7.2f}  {md['rate']:5d}  {md['channels']:2d}  {format:2}  {md['latitude']:8.5f}, {md['longitude']:8.5f}  {md['nfc']*1}  {md['nighthawk']*1}  {md['birdnet']*1}")
 
 if __name__ == "__main__":
     main()
