@@ -23,7 +23,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-s', '--source', default=".", type=str, help="Path to monitor for files.")
     arg_parser.add_argument('-d', '--destination', type=str, help="The directory to transfer the files.")
     arg_parser.add_argument('-e', '--extension', default="WAV", type=str, help="Extension of files to transfer.")
-    arg_parser.add_argument('-t', '--time', default="15", type=int, help="Length of time (s) to sleep before checking source dir for more files.")        
+    arg_parser.add_argument('-t', '--time', default="15", type=int, help="Length of time (s) to sleep before checking source dir for more files.")
     arg_parser.add_argument('-v', '--verbose', action="store_true", help="Log more verbosely.")
 
     return arg_parser
@@ -36,15 +36,20 @@ def main():
 
     while True:
         for item in glob.glob(f'{args.source}/*.{args.extension}'):
-            cur = os.path.split(item)[1]
+            srcpath, srcfile = os.path.split(item)
+            basename, extension = os.path.splitext(srcfile)
 
-            if not os.path.exists(cur + '.LCK'):
+            lock_file = os.path.join(srcpath, srcfile + '.LCK')
+
+            if not os.path.exists(lock_file):
+                if args.verbose:
+                    print(f"No lock file detected for : {os.path.join(srcpath, srcfile)}")
+
                 if os.path.exists(args.destination):
-                    dest = os.path.join(args.destination, cur)
+                    dest = os.path.join(args.destination, srcfile)
                     tmp = dest + '.TMP'
 
-                    if args.verbose:
-                        print(f"Transferring {item} to {tmp}")
+                    print(f"Transferring {os.path.join(srcpath, srcfile)} to {tmp}")
 
                     shutil.move(item, tmp)
 
@@ -53,10 +58,10 @@ def main():
 
                     shutil.move(tmp, dest)
                 else:
-                    print(f"Path does not exist: {args.destination}")  
+                    print(f"Path does not exist: {args.destination}")
             else:
                 if args.verbose:
-                    print(f"Lock detected on {cur}, skipping...")      
+                    print(f"Lock detected on {os.path.join(srcpath, srcfile)}, skipping...")
 
         time.sleep(args.time)
 
