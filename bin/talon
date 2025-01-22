@@ -775,7 +775,6 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('--timezone', type=validate_timezone, default="US/Pacific", help="Timezone of the location where the audio was recorded.")
     arg_parser.add_argument('--region', type=str, default="USA", help="Region of the location where the audio was recorded")
     arg_parser.add_argument('--name', type=str, default="King, WA", help="A descriptive name of the location where the audio was recorded")
-
     arg_parser.add_argument('--location', type=str, default="Space Needle", help="The name of an ebird location or hotspot for your NFC station.")
 
     display = arg_parser.add_mutually_exclusive_group()
