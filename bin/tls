@@ -67,13 +67,19 @@ def get_metadata(wavefile, defaults):
         except wave.Error as e:
             json_file = filename + '.json'
 
-            with open(json_file) as f:
-                data = json.load(f)
-            
-            metadata['rate'] = data['rate']
-            metadata['duration'] = -1
-            metadata['channels'] = data['channels']
-            metadata['format'] = data['format']
+            if os.path.exists(json_file):
+                with open(json_file) as f:
+                    data = json.load(f)
+                
+                metadata['rate'] = data['rate']
+                metadata['duration'] = -1
+                metadata['channels'] = data['channels']
+                metadata['format'] = data['format']
+            else:
+                metadata['rate'] = -1
+                metadata['duration'] = -1
+                metadata['channels'] = -1
+                metadata['format'] = "NA"
 
             if debug:
                 print(f"{wavefile} likely being written to: {e}")
