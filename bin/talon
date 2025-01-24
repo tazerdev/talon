@@ -990,7 +990,7 @@ def main():
                     start_dt = events[0]['dt']
                     stop_dt = events[-1]['dt']
                 
-                generate_timeseries_graph(events, start_dt, stop_dt, args.timeseries, vals['title'], vals['y-axis-max'])
+                generate_timeseries_graph(events, start_dt, stop_dt, args.timeseries, vals['title'], vals['y-axis-max'], vals['timezone'])
             elif args.labels:
                 generate_audacity_labels(events, args.force)
             elif args.groups:
