@@ -455,20 +455,20 @@ def generate_spectrograph(event: dict, clip_dir: str = 'clips', title: str = "",
         else:
             print('File exists, skipping. Use the --force option to regenerate the spectrograph.')
 
-def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str, ymax: int):
+def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str, ymax: int, tz: str):
     """
     Generate a frequency graph of supplied events.
 
     Args:
         events (list): A list of event dicts which we'll use to generate the graph.
         start_dt (datetime): The start time of data we wish to graph.
-        stop_dt (datetime): The stop time of data we wish to grpah.
+        stop_dt (datetime): The stop time of data we wish to graph.
         frequency (int): The time duration (minutes) we'll lump events into for the graph. 
         title (str): The title of the graph.
-        ymax (int): Maximum height of the chart (minimum is the bucket with the most events)
+        ymax (int): Maximum height of the chart (minimum is the bucket with the most events).
+        tz (str): The time zone of the data.
     """
     import math
-    import seaborn as sns
     import matplotlib.pyplot as plt
     import matplotlib.ticker as tck
 
