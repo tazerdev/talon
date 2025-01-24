@@ -778,8 +778,8 @@ def ParseCommandLineArguments():
 
     arg_parser.add_argument('--clip', action='store_true', help="Extract audio clips of results.")
     arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip (implies --clip).")
-    arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
-    arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
+    arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A datetime in ISO format.", default=None)
+    arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A datetime in ISO format.", default=None)
     arg_parser.add_argument('--title', type=str, help="A title for the time-series graph.")
     arg_parser.add_argument('--y-axis-max', type=int, help="Maximum height of the y-axis for the time-series chart, the max total for any bucket will take precedence over this value.")
 
