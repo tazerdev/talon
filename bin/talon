@@ -471,6 +471,7 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
     import math
     import matplotlib.pyplot as plt
     import matplotlib.ticker as tck
+    import matplotlib.dates as mdates
 
     rollavg = []
     buckets = []
@@ -486,7 +487,10 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
     if frequency > 0:
         numbuckets = int(((stop_dt - start_dt).total_seconds() / 60) / frequency)
         interval = timedelta(minutes=frequency)
-        cur = start_dt
+
+        # zero out start date so we can start on the hour and have our
+        # x-axis labels look nice
+        cur = start_dt.replace(minute=0, second=0, microsecond=0)
 
         # initialize buckets
         for i in range(0, numbuckets):
@@ -506,7 +510,7 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
 
         # add datetime labels
         for bucket in buckets:
-            labels.append(bucket.strftime('%m/%d %H:%M'))
+            labels.append(bucket)
 
         if DEBUG:
             print(f"numbuckets: {numbuckets}, interval: {interval}")
@@ -525,36 +529,33 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
         if i > max_value:
             max_value = math.ceil(i / 10.0) * 10
 
-    title += f"\n{start_dt.strftime('%m/%d/%Y %H:%M:%S %Z')} - {stop_dt.strftime('%m/%d/%Y %H:%M:%S %Z')}"
-    sns.set_theme()
-    custom_palette = ["#444499", "#FFFFFF", "#44A500"]
-    sns.set_theme(style="whitegrid", palette="pastel")
+    title += f" - {frequency * 3}-Minute Rolling Average"
+    title += f"\n{buckets[0].strftime('%m/%d/%Y %H:%M:%S%z')} - {buckets[-1].strftime('%m/%d/%Y %H:%M:%S%z')}"
+    fig, ax = plt.subplots(figsize=(30, 15))
+    plt.grid()
 
-    sns.set_palette(sns.color_palette(custom_palette))
-    fig, ax = plt.subplots()
-    ax.yaxis.set_minor_locator(tck.AutoMinorLocator())
-    ax.xaxis.set_minor_locator(tck.AutoMinorLocator())
-    ax.tick_params(axis='x', which='minor', bottom=False)
-
-    xax = ax.get_xticks()
-    xticks_label = [f"{num}" if i % 2 !=0 else '' for i,num in enumerate(xax)]
-    ax.set_xticks(xax, xticks_label)
-
-    plt.rcParams.update({'font.size': 32})
-    plt.figure(figsize=(30,10))
-    plt.margins(.1)
     plt.ylim(0, max_value)
-    plt.xlim(0,numbuckets-1)
+    plt.xlim(buckets[0], buckets[-1])
+    plt.rcParams['timezone'] = 'US/Eastern'
+
+    # Format the x-axis labels as dates
+    date_format = mdates.DateFormatter("%H:%M:%S", tz=pytz.timezone(tz))
+    ax.xaxis.set_major_formatter(date_format)
+
+    # TODO: For long time periods, switch to using hourlocator instead,
+    # maybe try and keep the x-labels fewer than 30.
+    # ax.xaxis.set_major_locator(mdates.HourLocator(byhour=2,interval=1))
+    ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=[0,30]))
 
     plt.xlabel('Time', fontsize=24, labelpad=30)
     plt.ylabel('Detections', fontsize=24, labelpad=30)
     plt.title(title, fontsize=32, pad=30)
-    plt.xticks(rotation=60, fontsize=16)
+    plt.xticks(fontsize=16, rotation=60)
     plt.yticks(fontsize=16)
     plt.plot(labels, rollavg)
     plt.fill_between(labels, rollavg, alpha=0.3)
 
-    plt.savefig('areaplot2.png', pad_inches=0.5, bbox_inches='tight')
+    plt.savefig('time-series.png', pad_inches=0.5, bbox_inches='tight')
     plt.close()
 
 def generate_audacity_labels(events: list, force: bool = False):
