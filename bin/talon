@@ -1042,9 +1042,9 @@ def main():
                 # print detail for all remaining events
                 for event in events:
                     if event['engine'] == 'nh':
-                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-5.2f}%  {event['engine']}  {event['protocol']}  {event['common_name']} ({event['identity']})\n"
+                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-6.2f}%  {event['engine']}  {event['protocol']}  {event['common_name']} ({event['identity']})\n"
                     else:
-                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-5.2f}%  {event['engine']}  {event['protocol']}  {event['identity']}\n"
+                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-6.2f}%  {event['engine']}  {event['protocol']}  {event['identity']}\n"
 
                     if DEBUG:
                         output += event['debug'] + '\n'
