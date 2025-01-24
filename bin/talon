@@ -535,7 +535,10 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
     plt.grid()
 
     plt.ylim(0, max_value)
-    plt.xlim(buckets[0], buckets[-1])
+    
+    # This trims the x-axis, which we don't necessarily want. May need
+    # to turn this into an option (e.g., --x-trim)
+    # plt.xlim(buckets[0], buckets[-1])
     plt.rcParams['timezone'] = 'US/Eastern'
 
     # Format the x-axis labels as dates
