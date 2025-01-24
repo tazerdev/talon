@@ -768,15 +768,15 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip (implies --clip).")
     arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
     arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A date in (YYYY-MM-DD) format.", default=None)
-    arg_parser.add_argument('--title', type=str, help="A title for the time-series graph.", default="Detection Chart for Date Range:")
-    arg_parser.add_argument('--y-axis-max', default=0, type=int, help="Maximum height of the y-axis for the time-series chart, the max total for any bucket will take precedence over this value.")
+    arg_parser.add_argument('--title', type=str, help="A title for the time-series graph.")
+    arg_parser.add_argument('--y-axis-max', type=int, help="Maximum height of the y-axis for the time-series chart, the max total for any bucket will take precedence over this value.")
 
-    arg_parser.add_argument('--longitude', type=validate_longitude, default=-122.34930532895686, help="Longitude, in decimal format, of the location where the audio was recorded.")
-    arg_parser.add_argument('--latitude', type=validate_latitude, default=47.620529386334695, help="Latitude, in decimal format, of the location where the audio was recorded.")
-    arg_parser.add_argument('--timezone', type=validate_timezone, default="US/Pacific", help="Timezone of the location where the audio was recorded.")
-    arg_parser.add_argument('--region', type=str, default="USA", help="Region of the location where the audio was recorded")
-    arg_parser.add_argument('--name', type=str, default="King, WA", help="A descriptive name of the location where the audio was recorded")
-    arg_parser.add_argument('--location', type=str, default="Space Needle", help="The name of an ebird location or hotspot for your NFC station.")
+    arg_parser.add_argument('--longitude', type=validate_longitude, help="Longitude, in decimal format, of the location where the audio was recorded.")
+    arg_parser.add_argument('--latitude', type=validate_latitude, help="Latitude, in decimal format, of the location where the audio was recorded.")
+    arg_parser.add_argument('--timezone', type=validate_timezone, help="Timezone of the location where the audio was recorded.")
+    arg_parser.add_argument('--region', type=str, help="Region of the location where the audio was recorded")
+    arg_parser.add_argument('--name', type=str, help="A descriptive name of the location where the audio was recorded")
+    arg_parser.add_argument('--location', type=str, help="The name of an ebird location or hotspot for your NFC station.")
 
     display = arg_parser.add_mutually_exclusive_group()
     display.add_argument('--labels', action='store_true', help="Generate Audacity labels of the selected data for all files.")
@@ -804,19 +804,7 @@ def main():
     output = ""
     globstr = "*.wav"
 
-    # use cli values by default
-    vals = {
-        'latitude': args.latitude,
-        'longitude': args.longitude,
-        'timezone': args.timezone,
-        'region': args.region,
-        'name': args.name,
-        'location': args.location,
-        'title': args.title,
-        'y-axis-max': args.y_axis_max,
-        'ebird_tax': './eBird_taxonomy_v2024.csv',
-        'group_xrf': './group_code_xref.csv'
-    }
+    vals = {}
 
     # read values from a config file instead, if we can't read all values
     # from the config file, then exit so we're not using a mix of cli and
@@ -826,15 +814,15 @@ def main():
             config = configparser.ConfigParser()
             config.read(args.config)
 
-            vals['latitude'] = validate_latitude(config['location']['latitude'])
-            vals['longitude'] = validate_longitude(config['location']['longitude'])
-            vals['timezone'] = validate_timezone(config['location']['timezone'])
-            vals['region'] = config['location']['region']
-            vals['name'] = config['location']['name']
-            vals['location'] = config['ebird']['location']
-            vals['filter'] = config['general']['filter']
-            vals['title'] = config['chart']['title']
-            vals['y-axis-max'] = int(config['chart']['y-axis-max'])
+            vals['latitude'] = validate_latitude(config['location']['latitude']) if args.latitude is None else args.latitude
+            vals['longitude'] = validate_longitude(config['location']['longitude']) if args.longitude is None else args.longitude
+            vals['timezone'] = validate_timezone(config['location']['timezone']) if args.timezone is None else args.timezone
+            vals['region'] = config['location']['region'] if args.region is None else args.region
+            vals['name'] = config['location']['name'] if args.name is None else args.name
+            vals['location'] = config['ebird']['location'] if args.location is None else args.location
+            vals['filter'] = config['general']['filter'] if args.filter is None else args.filter
+            vals['title'] = config['chart']['title'] if args.title is None else args.title
+            vals['y-axis-max'] = int(config['chart']['y-axis-max']) if args.y_axis_max is None else args.y_axis_max
             vals['ebird_tax'] = config['general']['ebird_taxonomy']
             vals['group_xrf'] = config['general']['group_code_xref']
         except configparser.MissingSectionHeaderError as e:
