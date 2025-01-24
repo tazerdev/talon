@@ -613,9 +613,14 @@ def get_chklst_buckets(events: list, start_dt: dt, stop_dt: dt, vals: dict):
 
     AstronomicalDawn = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=pytz.utc)['dawn'].replace(microsecond=0)
     AstronomicalDusk = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=pytz.utc)['dusk'].replace(microsecond=0)
+    Sunset = sun(location.observer, date=curdate, tzinfo=curtz)['sunset'].replace(microsecond=0) + timedelta(minutes=20)
+    Sunrise = sun(location.observer, date=curdate, tzinfo=curtz)['sunrise'].replace(microsecond=0) - timedelta(minutes=40)
 
     AstronomicalDawnLocal = AstronomicalDawn.astimezone(curtz)
     AstronomicalDuskLocal = AstronomicalDusk.astimezone(curtz)
+    SunsetLocal = Sunset.astimezone(curtz)
+    SunriseLocal = Sunrise.astimezone(curtz)
+
     MidnightLocal = curtz.localize(dt.combine(curdate, datetime.time(0,0,0))).replace(microsecond=0)
 
     tomorrow = MidnightLocal + datetime.timedelta(seconds=86400)
@@ -641,13 +646,17 @@ def get_chklst_buckets(events: list, start_dt: dt, stop_dt: dt, vals: dict):
         
 
         output += f"Time Zone: UTC\n"
-        output += f"------------------------------------------------\n"      
+        output += f"------------------------------------------------\n"
         output += f"Astronomical Dawn : {AstronomicalDawn.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Sunrise           : {Sunrise.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Sunset            : {Sunset.strftime('%Y%m%d %H:%M:%S %Z')}\n"
         output += f"Astronomical Dusk : {AstronomicalDusk.strftime('%Y%m%d %H:%M:%S %Z')}\n\n"
 
         output += f"Time Zone: {vals['timezone']}\n"
         output += f"------------------------------------------------\n"      
         output += f"Astronomical Dawn : {AstronomicalDawnLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Sunrise           : {SunriseLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Sunset            : {SunsetLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
         output += f"Astronomical Dusk : {AstronomicalDuskLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
 
         print(output)
