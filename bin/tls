@@ -39,11 +39,13 @@ def get_metadata(wavefile, defaults):
 
             metadata['station'] = fparsed[0]
             metadata['wave'] = wavefile
-            metadata['moonphase'] = ephem.Moon(metadata['start'])
+            metadata['moonphase'] = ephem.Moon(metadata['start']).moon_phase
             metadata['latitude'] = defaults['latitude']
             metadata['longitude'] = defaults['longitude']
             metadata['timezone'] = defaults['timezone']
             metadata['device'] = defaults['device']
+            metadata['name'] = fparsed[0]
+            metadata['copyright'] = defaults['copyright']
 
             # get WAV details straight from the WAV file
             if os.path.exists(wavefile):
@@ -125,15 +127,16 @@ def get_guano_md(wavefile):
         metadata['wave'] = g['original filename'] #
         metadata['duration'] = float(g['length']) #
         metadata['rate'] = int(g['samplerate']) #
-        metadata['station'] = g['TA|station'] #
+        metadata['name'] = g['TA|station'] #
         metadata['moonphase'] = float(g['TA|moonphase']) #
         metadata['timezone'] = g['TA|timezone']
         metadata['format'] = g['TA|format'] #
         metadata['channels'] = int(g['TA|channels']) #
         metadata['device'] = g['TA|device']
+        metadata['copyright'] = g['TA|copyright']
     except KeyError as e:
         if debug:
-            print(f"Key not found: {e}")
+            print(f"Key(s) not found: {e}")
         
             for key, value in g.items():
                 print(key, value)
@@ -178,17 +181,22 @@ def ParseCommandLineArguments():
     arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="Talon recording scheduler.")
     arg_parser.add_argument('--config', default="/opt/talon/etc/talon.ini", type=str, help="Path to a configuration file.")
 
-    arg_parser.add_argument('-d', '--device', type=validate_intorstr,help='Audio device to use (numeric ID or substring as provided by the --list-devices option.)')
+    arg_parser.add_argument('-d', '--device', help='Audio device to use (numeric ID or substring as provided by the --list-devices option.)')
     arg_parser.add_argument('-r', '--rate', default=48000, choices=[48000, 44100, 22050], type=int, help='Sampling rate.')
     arg_parser.add_argument('-c', '--channels', default=1, type=int, help='Number of input channels to record.')
     arg_parser.add_argument('-f', '--format', default='PCM_32', choices=['PCM_8', 'PCM_16', 'PCM_24', 'PCM_32'], type=str, help='Sound file bit depth.')
 
-    arg_parser.add_argument('--longitude', type=validate_longitude, default=-122.34930532895686, help="Longitude, in decimal format, of the location where the audio was recorded.")
-    arg_parser.add_argument('--latitude', type=validate_latitude, default=47.620529386334695, help="Latitude, in decimal format, of the location where the audio was recorded.")
-    arg_parser.add_argument('--timezone', type=validate_timezone, default="US/Pacific", help="Timezone of the location where the audio was recorded.")
-    arg_parser.add_argument('--name', type=str, default="RPI1", help="A descriptive name of the recording station.")
+    arg_parser.add_argument('--longitude', help="Longitude, in decimal format, of the location where the audio was recorded.")
+    arg_parser.add_argument('--latitude', help="Latitude, in decimal format, of the location where the audio was recorded.")
+    arg_parser.add_argument('--timezone', help="Timezone of the location where the audio was recorded.")
+    arg_parser.add_argument('--name', type=str, help="A descriptive name of the recording station.")
+    arg_parser.add_argument('--region', type=str, help="A descriptive name of the recording station.")
+    arg_parser.add_argument('--location', type=str, help="A descriptive name of the recording station.")
+    arg_parser.add_argument('--copyright', type=str, help="A descriptive name of the recording station.")
 
-    arg_parser.add_argument('--duration', default=60, type=int, help='Duration of recording in minutes (max 1440, or 24 hours).')
+    arg_parser.add_argument('--duration', type=int, help='Duration of recording in minutes (max 1440, or 24 hours).')
+
+    arg_parser.add_argument('--writemd', action='store_true', help='Print extra debugging information.')
     arg_parser.add_argument('--debug', action='store_true', help='Print extra debugging information.')
 
     return arg_parser
@@ -204,18 +212,7 @@ def main():
     debug = args.debug
 
     wavs = []
-
-    # use cli values by default
-    defaults = {
-        'format': args.format,
-        'channels': args.channels,
-        'rate': args.rate,
-        'latitude': args.latitude,
-        'longitude': args.longitude,
-        'timezone': args.timezone,
-        'name': args.name,
-        'device': args.device
-    }
+    vals = {}
 
     # read values from a config file instead, if we can't read all values
     # from the config file, then exit so we're not using a mix of cli and
@@ -225,14 +222,14 @@ def main():
             config = configparser.ConfigParser()
             config.read(args.config)
 
-            defaults['latitude'] = validate_latitude(config['location']['latitude'])
-            defaults['longitude'] = validate_longitude(config['location']['longitude'])
-            defaults['timezone'] = validate_timezone(config['location']['timezone'])
-            defaults['name'] = config['audio']['name']
-            defaults['format'] = config['audio']['format']
-            defaults['channels'] = int(config['audio']['channels'])
-            defaults['rate'] = int(config['audio']['rate'])
-            defaults['device'] = config['audio']['device']
+            vals['latitude'] = validate_latitude(config['location']['latitude']) if args.latitude is None else args.latitude
+            vals['longitude'] = validate_longitude(config['location']['longitude']) if args.longitude is None else args.longitude
+            vals['timezone'] = validate_timezone(config['location']['timezone']) if args.timezone is None else args.timezone
+            vals['region'] = config['location']['region'] if args.region is None else args.region
+            vals['name'] = config['audio']['name'] if args.name is None else args.name
+            vals['location'] = config['ebird']['location'] if args.location is None else args.location
+            vals['copyright'] = config['general']['copyright'] if args.copyright is None else args.copyright
+            vals['device'] = config['audio']['device'] if args.device is None else args.device
         except configparser.MissingSectionHeaderError as e:
             print(f"Error parsing config, the supplied config file contains no section headers.")
             sys.exit(1)
@@ -244,7 +241,7 @@ def main():
             sys.exit(1)
 
     for wavfile in Path('.').glob(globstr, case_sensitive=False):
-        md = get_metadata(wavfile, defaults)
+        md = get_metadata(wavfile, vals)
 
         if len(md):
             wavs.append(md)
