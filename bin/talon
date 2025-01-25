@@ -6,6 +6,7 @@ import sys
 import math
 import pytz
 import wave
+import guano
 import signal
 import argparse
 import datetime
@@ -155,13 +156,29 @@ def get_metadata(wavfile: str, timezone: str):
 
     try:
         if filename.find('_') > 0:
-            fparsed = filename.split('_')
-            id = fparsed[0]
-            start_dt = dt.strptime(f"{fparsed[1]} {fparsed[2]}", '%Y%m%d %H%M%S%z')
+            metadata['wav'] = wavfile
+            g = guano.GuanoFile(wavfile)
 
-        metadata['id'] = id
-        metadata['wav'] = wavfile
-        metadata['start_dt'] = start_dt
+            # we have guano metadata
+            if len(g.to_string()) > 0:
+                for key, value in g.items():
+                    if key == 'loc posiiton':
+                        vals = value.split(' ')
+                        metadata['latitude'] = vals[0]
+                        metadata['longitude'] = vals[1]
+                    elif key == 'timestamp':
+                        metadata['start_dt'] = dt.fromisoformat(value)
+                    elif key == 'TA|timezone':
+                        metadata['timezone'] = value
+                    elif key == 'TA|station':
+                        metadata['id'] = value
+            else:
+                fparsed = filename.split('_')
+                id = fparsed[0]
+                start_dt = dt.strptime(f"{fparsed[1]} {fparsed[2]}", '%Y%m%d %H%M%S%z')
+
+                metadata['id'] = id
+                metadata['start_dt'] = start_dt
     except (IndexError, ValueError) as e:
         if DEBUG:
             print(f"Error {e} when parsing filename: {wavfile}")
