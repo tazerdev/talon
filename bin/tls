@@ -148,6 +148,45 @@ def get_guano_md(wavefile):
 
     return metadata
 
+def write_guano_md(metadata):
+    """
+    Writes metadata to WAV file after the recording is finished.
+    """
+    try:
+        if debug:
+            print(f"Writing GUANO data to {metadata['wave']}")
+            print(f"g['loc position'] = {metadata['latitude']} {metadata['longitude']}")
+            print(f"g['timestamp'] = {metadata['start'].isoformat()}")
+            print(f"g['original filename'] = {metadata['wave']}")
+            print(f"g['length'] = {metadata['duration']}")
+            print(f"g['samplerate'] = {metadata['rate']}")
+            print(f"g['TA|station'] = {metadata['name']}")
+            print(f"g['TA|moonphase'] = {metadata['moonphase']}")
+            print(f"g['TA|timezone'] = {metadata['timezone']}")
+            print(f"g['TA|format'] = {metadata['format']}")
+            print(f"g['TA|channels'] = {metadata['channels']}")
+            print(f"g['TA|device'] =  {metadata['device']}")
+            print(f"g['TA|copyright'] = {metadata['copyright']}")
+
+        # write guano header
+        g = guano.GuanoFile(metadata['wave'])
+        g['loc position'] = f"{metadata['latitude']} {metadata['longitude']}"
+        g['timestamp'] = metadata['start'].isoformat()
+        g['original filename'] = metadata['wave']
+        g['length'] = metadata['duration']
+        g['samplerate'] = metadata['rate']
+        g['TA|station'] = metadata['name']
+        g['TA|moonphase'] = metadata['moonphase']
+        g['TA|timezone'] = metadata['timezone']
+        g['TA|format'] = metadata['format']
+        g['TA|channels'] = metadata['channels']
+        g['TA|device'] =  metadata['device']
+        g['TA|copyright'] = metadata['copyright']
+
+        g.write(make_backup=False)
+    except Exception as e:
+        print(f"Exception caught: {e}")
+
 def validate_timezone(value):
     if value not in pytz.all_timezones:
         raise argparse.ArgumentTypeError("Specified time zone not found in time zone database.")
@@ -248,6 +287,9 @@ def main():
         else:
             if debug:
                 print(f"No GUANO data found in {wavfile}")
+
+        if args.writemd:
+            write_guano_md(md)
 
     wavs = sorted(wavs, key=lambda d: d['start'])
 
