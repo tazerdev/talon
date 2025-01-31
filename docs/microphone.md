@@ -32,9 +32,11 @@ The NVMe case and drive are optional. You can pick up a Pi case for as little as
 
 I've read that the Scarlet 2i2 works well under Linux and is only about $39.99.
 
+```
 - $174.99 - Roland Rubix22
 -------------------------------------------------------------------
   $174.99
+```
 
 ### Microphone (durable, nearly all-weather if using plastic wrap)
 
