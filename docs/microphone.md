@@ -70,7 +70,7 @@ The 10" Birds Choice Protective Dome seems to be as effective as the PFNRTH, and
 
 ### Miscellaneous
 
-The Plano field box works, but the Pi gets hot once the morning sun hits is. It killed one of my Pi's before I learned to hide it in the shade. A bigger box would be better as there's more air to absorb the heat.
+The Plano field box works, but the Pi gets hot once the morning sun hits it. It killed one of my Pi's before I learned to hide it in the shade. A bigger box would be better as there's more air to absorb the heat.
 
 ```
 -  $11.99 - 1 Plano 131250 field box $11.99
