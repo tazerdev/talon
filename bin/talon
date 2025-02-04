@@ -915,25 +915,14 @@ def main():
         print(f"Path not found: {args.path}")
         sys.exit(1)
     else:
-        # linux is case sensitive, windows isn't
-        if sys.platform == 'linux':
-            if args.recurse:
-                for wavfile in Path(args.path).rglob(globstr, case_sensitive=False):
-                    audiofiles.append(wavfile)
-                    events += get_events(wavfile, taxonomy, vals['timezone'])
-            else:
-                for wavfile in Path(args.path).glob(globstr, case_sensitive=False):
-                    audiofiles.append(wavfile)
-                    events += get_events(wavfile, taxonomy, vals['timezone'])
+        if args.recurse:
+            for wavfile in Path(args.path).rglob(globstr):
+                audiofiles.append(wavfile)
+                events += get_events(wavfile, taxonomy, vals['timezone'])
         else:
-            if args.recurse:
-                for wavfile in Path(args.path).rglob(globstr):
-                    audiofiles.append(wavfile)
-                    events += get_events(wavfile, taxonomy, vals['timezone'])
-            else:
-                for wavfile in Path(args.path).glob(globstr):
-                    audiofiles.append(wavfile)
-                    events += get_events(wavfile, taxonomy, vals['timezone'])
+            for wavfile in Path(args.path).glob(globstr):
+                audiofiles.append(wavfile)
+                events += get_events(wavfile, taxonomy, vals['timezone'])
 
     # need this try/except to handle broken pipes when using 'less' under linux
     try:
