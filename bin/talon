@@ -831,7 +831,7 @@ def main():
     DEBUG = args.debug
 
     output = ""
-    globstr = "*.wav"
+    globstr = "*.[wW][aA][vV]"
 
     vals = {}
 
