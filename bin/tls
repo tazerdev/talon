@@ -89,7 +89,7 @@ def get_metadata(wavefile, defaults):
     metadata['birdnet'] = False
     metadata['nighthawk'] = False
     
-    bn_file = os.path.join(curpath, filename + '.BirdNET.results.r.csv')
+    bn_file = os.path.join(curpath, filename + '_birdnet.csv')
     nh_file = os.path.join(curpath, filename + '_detections.csv')
 
     if os.path.exists(bn_file):
