@@ -251,7 +251,7 @@ def main():
     args = arg_parser.parse_args()
     signal.signal(signal.SIGINT, signal_handler)
 
-    globstr = "*.wav"
+    globstr = "*.[wW][aA][vV]"
 
     global debug
     debug = args.debug
@@ -285,7 +285,7 @@ def main():
             print(f"Error parsing config, invalid value specified for: {e}")
             sys.exit(1)
 
-    for wavfile in Path('.').glob(globstr, case_sensitive=False):
+    for wavfile in Path('.').glob(globstr):
         md = get_metadata(wavfile, vals)
 
         if len(md):
