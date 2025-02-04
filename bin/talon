@@ -207,7 +207,7 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
     events = []
 
     nh_ext = '_detections.csv'
-    bn_ext = '.BirdNET.results.r.csv'
+    bn_ext = '_birdnet.csv'
 
     curpath, filename = os.path.split(wavfile)
     filename, extension = os.path.splitext(filename)
@@ -225,11 +225,11 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
 
             for det in bn_tmp:
                 try:
-                    delta = timedelta(seconds=float(det['start']))
+                    delta = timedelta(seconds=float(det['start_time']))
                     abstime = metadata['start_dt'] + delta
                     
                     # add relative, to the wav file, start time
-                    mins, secs = divmod(float(det['start']), 60)
+                    mins, secs = divmod(float(det['start_time']), 60)
                     hours, mins = divmod(mins, 60)
                     start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
 
@@ -240,9 +240,9 @@ def get_events(wavfile: str, taxonomy: dict, timezone: str):
                             'identity': det['common_name'],
                             'engine': 'bn',
                             'filepath': wavfile,
-                            'start': float(det['start']),
+                            'start': float(det['start_time']),
                             'start_rel': start_rel,
-                            'end': float(det['end']),
+                            'end': float(det['end_time']),
                             'common_name': det['common_name'],
                             'debug': ''
                         }
