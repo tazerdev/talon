@@ -222,7 +222,7 @@ def main():
         print("Id    Rate      Ch    Name")
 
         for dev in devs:
-            if dev['max_output_channels'] > 0:
+            if dev['max_output_channels'] == 0:
                 name = dev['name'].replace('\n','')
                 print(f"[{dev['index']:2d}] {dev['default_samplerate']:9.2f} {dev['max_output_channels']:4d}   {name}")
     else:
