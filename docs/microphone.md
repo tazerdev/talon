@@ -30,7 +30,7 @@ The NVMe case and drive are optional. You can pick up a Pi case for as little as
 
 ### Audio Device
 
-I've read that the Scarlet 2i2 works well under Linux and is only about $39.99.
+I've read that the Scarlet 2i2 works well under Linux, but is about $20 more than the Roland. I believe it used to be much cheaper but the price has gone up substantnially.
 
 ```
 - $174.99 - Roland Rubix22
