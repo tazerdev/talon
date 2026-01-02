@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import time
+import json
+import queue
+import signal
+import argparse
+import talonlib
+import threading
+import sounddevice as sd
+import soundfile as sf
+from datetime import datetime as dt
+from datetime import timedelta
+from zoneinfo import ZoneInfo
+
+def signal_handler(signum, frame):
+    signal.signal(signum, signal.SIG_IGN)
+
+    print("CTRL-C detected, cleaning up before exiting...")
+
+   # ensure the recording thread gets alerted that we need to stop
+    tev.set()
+    time.sleep(1)
+    record_post(vals.copy())
+
+    sys.exit(0)
+
+def sleepuntil(end):
+    while True:
+        delta = end - time.time()
+
+        if delta <= 0:
+            break
+        else:
+            time.sleep(delta / 2)
+
+def validate_intorstr(text):
+    """Helper function for argument parsing."""
+    try:
+        return int(text)
+    except ValueError:
+        return text
+
+def callback(indata, frames, time, status):
+    """
+    This is called from a separate thread for each audio block.
+    """
+    if status:
+        print(status, file=sys.stderr)
+
+    q.put(indata.copy())
+
+def record(callback):
+    format = f"PCM_{vals['format']}"
+
+    with sf.SoundFile(vals['wave'], mode='x', samplerate=vals['rate'], channels=vals['channels'], subtype=format) as file:
+        with sd.InputStream(samplerate=vals['rate'], device=vals['device'], channels=vals['channels'], callback=callback):
+            while True:
+                file.write(q.get())
+
+                if tev.is_set():
+                    break
+
+def record_post(metadata):
+    """
+    Writes metadata to WAV file after the recording is finished.
+    """
+    try:
+        if debug:
+            print(f"[{dt.now()}] record_post(): Begin record_post() for {metadata['wave']}")
+
+        if section in config and config[section]['type'] == 'station':
+            if debug:
+                print(f"[{dt.now()}] record_post(): Instantiating GUANO class for {metadata['wave']}")
+
+            tgf = talonlib.TalonGuanoFile(metadata['wave'], config, clear=True)
+
+            if debug:
+                print(f"[{dt.now()}] record_post(): Writing GUANO data to {metadata['wave']}")
+
+            tgf.write()
+
+            if debug:
+                print(f"[{dt.now()}] record_post(): Done writing GUANO data to {metadata['wave']}")
+
+            # we're done, remove the lock
+            if os.path.exists(metadata['json']):
+                if debug:
+                    print(f"[{dt.now()}] record_post(): Removing {metadata['json']}")
+
+                os.remove(metadata['json'])
+    except Exception as e:
+        print(f"Exception caught: {e}")
+
+    # we're done, remove the lock
+    if os.path.exists(metadata['wave'] + '.LCK'):
+        if debug:
+            print(f"[{dt.now()}] record_post(): Removing {metadata['wave']}")
+    
+        os.remove(metadata['wave'] + '.LCK')
+
+def ParseCommandLineArguments():
+    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="trecord - a utility for recording WAV audio from a selected device.")
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument('--list', action='store_true', help='Display available audio devices.')
+    group.add_argument('--schedule', action='store_true', help='Display recording schedule.')
+
+    group.add_argument('--device', type=validate_intorstr,help='Audio device to use (numeric ID or substring as provided by the --list-devices option.)')
+
+    arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Path to a configuration file.")
+    arg_parser.add_argument('-l', '--location', type=str, help="The name of a location specified in the config file.")
+
+    arg_parser.add_argument('-r', '--rate', default=48000, choices=[48000, 44100, 22050], type=int, help='Sampling rate.')
+    arg_parser.add_argument('-n', '--channels', default=1, type=int, help='Number of input channels to record.')
+    arg_parser.add_argument('-b', '--bit-depth', default='PCM_32', choices=['PCM_8', 'PCM_16', 'PCM_24', 'PCM_32'], type=str, help='Sound file bit depth.')
+    arg_parser.add_argument('-d', '--duration', default=60, type=int, help='Duration of recording in minutes (max 1440, or 24 hours).')
+    arg_parser.add_argument('--debug', action='store_true', help='Print extra debugging information.')
+    arg_parser.add_argument('-p', '--protocol', default='all', choices=['all', 'day', 'nfc'], type=str, help='Only record these protocols.')
+
+    return arg_parser
+
+def main():
+    # TODO: MAYBE? Need to initialize a talonguanofile class as soon as possible
+    # so we can write it to a JSON file in case of a power outage.
+    arg_parser = ParseCommandLineArguments()
+    args = arg_parser.parse_args()
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # setup some global variables
+    global q
+    q = queue.Queue()
+
+    global debug
+    debug = args.debug
+
+    global tev
+    tev = threading.Event()
+
+    global vals
+
+    global config
+    global section
+
+    if args.list:
+        devs = sd.query_devices()
+        max_length = max(len(d["name"]) for d in devs)
+
+        print("ID    Rate       Ch   Name")
+
+        for dev in devs:
+            # if dev['max_output_channels'] == 0:
+            name = dev['name'].replace('\r\n','')
+            print(f"[{dev['index']:2d}] {dev['default_samplerate']:9.2f} {dev['max_input_channels']:4d}   {name}")
+    else:
+        if os.path.exists(args.config):
+            tc = talonlib.TalonConfig(args.config)
+            config = tc.config
+
+            if not args.location:
+                section = config['general']['default']
+            else:
+                section = args.location
+                
+            sec_audio = f"{section}.audio"
+
+        # allow the user to override the recording device on the commandline
+        if args.device:
+            curdevice = args.device
+        else:
+            curdevice = config[sec_audio]['device']
+
+        # use cli values by default
+        vals = {
+            'format': int(config[sec_audio]['bits']) or args.bit_depth,
+            'channels': int(config[sec_audio]['channels']) or args.channels,
+            'rate': int(config[sec_audio]['rate']) or args.rate,
+            'timezone': config[section]['timezone'],
+            'name': section,
+            'device': curdevice
+        }
+
+        if section in config and config[section]['type'] == 'station':
+            # TODO: We should implement this, also we should implement NFC only recording
+            # if args.start:
+            #     curdate = args.start.astimezone(ZoneInfo(config[section]['timezone']))
+            # else:
+            curdate = dt.now()
+
+            # if args.days:
+            #     hours = args.days * 24
+            # else:
+            # TODO: reimplement args.days, or some limiting factor, so we can end recording
+            # otherwise, we'll record infinitely
+            hours = -1
+            
+            ts = talonlib.TalonSchedule(
+                config[section]['latitude'],
+                config[section]['longitude'],
+                config[section]['timezone'],
+                config[section]['name'],
+                curdate,
+                hours,
+                args.duration * 60,
+                args.debug
+            )
+
+            if args.schedule:
+                print(ts)
+                print()
+
+                i = 0
+
+                for item in ts:
+                    pass
+
+                    if i >= 24:
+                        break
+                    i += 1
+                    print(f"{item['protocol']}  {item['start'].replace(microsecond=0)}  {item['stop'].replace(microsecond=0)}")
+            else:
+                try:
+                    # running query_devices ensures that the device is available before proceeding
+                    device_info = sd.query_devices(vals['device'], 'input')
+                    vals['device'] = device_info['index']
+
+                    for item in ts:
+                        if args.protocol == 'all' or item['protocol'].lower() in args.protocol:
+                            # ensure the event flag is cleared in case this isn't our first time around
+                            tev.clear()
+
+                            # setup our recording and json file names
+                            curname = f"{section}_{item['start'].strftime('%Y%m%d_%H%M%S%z')}"
+                            vals['wave'] = curname + '.WAV'
+                            vals['json'] = curname + '.json'
+
+                            if debug:
+                                print(f"[{dt.now()}] main(): Recording data from {vals['device']} to {vals['wave']}")
+                                print(f"[{dt.now()}] main(): Protocol : {item['protocol']}")
+                                print(f"[{dt.now()}] main(): Start    : {item['start']}")
+                                print(f"[{dt.now()}] main(): Stop     : {item['stop']}")
+                                print(f"[{dt.now()}] main(): Duration : {item['stop'] - item['start']}")
+
+                            # write metadata to file before recording in case we lose power
+                            # or the process is killed in an unfriendly manner. we can then
+                            # commit the metadata using another tool like talon or tls
+                            with open(vals['json'], 'w') as f:
+                                json.dump(vals, f, indent=4, sort_keys=True, default=str)
+
+                            # create a lock file so the other apps know not to touch the WAV file.
+                            with open(vals['wave'] + '.LCK', 'w') as f:
+                                f.write(str(os.getpid()))
+
+                            # setup and start the recording thread
+                            t1=threading.Thread(target=record, args=([callback]))
+                            t1.start()
+
+                            # sleep while the recording is happening
+                            sleepuntil(item['stop'].timestamp())
+
+                            # signal the thread to stop recording
+                            tev.set()
+
+                            # wait until the recording actually stops before proceeding
+                            # otherwise we'll get a device in use exception
+                            t1.join()
+
+                            record_post(vals)
+                        else:
+                            # sleep until the next recording slot
+                            sleepuntil(item['stop'].timestamp())
+
+                except sd.PortAudioError as e:
+                    print('Unable to open audio device')
+                except Exception as e:
+                    sys.exit(type(e).__name__ + ': ' + str(e))
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import wave
+import signal
+import argparse
+import talonlib
+import configparser
+from datetime import datetime as dt
+
+
+def signal_handler(signum, frame):
+    print("CTRL-C detected, exiting.")
+
+    signal.signal(signum, signal.SIG_IGN)
+    sys.exit(0)
+
+def ParseCommandLineArguments():
+    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="tmdupdate - a utility for writing GUANO metadata from the config file into a WAV file.")
+    arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Config file to attempt to read.")
+    arg_parser.add_argument('-f', '--force', action='store_true', help='Overwrite the GUANO header if it already exists.')
+    arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
+
+    return arg_parser
+
+def main():
+    signal.signal(signal.SIGINT, signal_handler)
+
+    timestamp = ''
+
+    arg_parser = ParseCommandLineArguments()
+    args, curfile = arg_parser.parse_known_args()
+
+    if curfile:
+        curfile = curfile[0]
+
+        if os.path.exists(args.config) and os.path.exists(curfile):
+            try:
+                tc = talonlib.TalonConfig(args.config)
+                config = tc.config
+                section = os.path.basename(curfile).split('_')[0]
+
+                if section in config and config[section]['type'] == 'station':
+                    try:
+                        tgf = talonlib.TalonGuanoFile(curfile, config, clear=True)
+
+                        print(tgf)
+
+                        if args.force:
+                            print(f"Writing GUANO header to {curfile}")
+                            tgf.write()
+                    except wave.Error as e:
+                        print(f'GUANO WAV Error: {e}')
+
+                        twf = talonlib.TalonWAVFile(curfile)
+                        print(twf)
+
+            except configparser.MissingSectionHeaderError as e:
+                print(f"Error parsing config, the supplied config file contains no section headers.")
+                sys.exit(1)
+            except KeyError as e:
+                print(f"Error parsing config, unable to find key: {e}, using commandline arguments instead (if available.)")
+            except argparse.ArgumentTypeError as e:
+                print(f"Error parsing config, invalid value specified for: {e}")
+                sys.exit(1)
+    else:
+        print('No file specified.')
+
+if __name__ == "__main__":
+    sys.exit(main())

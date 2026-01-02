@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import json
+import signal
+import argparse
+import talonlib
+import datetime
+from pathlib import Path
+from astral.sun import sun
+from astral import LocationInfo
+from datetime import datetime as dt
+from datetime import timedelta
+from zoneinfo import ZoneInfo
+
+def signal_handler(signum, frame):
+    print("CTRL-C detected, exiting.")
+
+    signal.signal(signum, signal.SIG_IGN)
+    sys.exit(0)
+
+def ParseCommandLineArguments():
+    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="tlist - a utility for listing details of WAV files.")
+    arg_parser.add_argument('-p', '--path', default=".", type=str, help="Directory or file to parse.")
+    arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Config file to attempt to read.")
+    arg_parser.add_argument('-j', '--json', action='store_true', help='Output results in JSON format.')
+    arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
+    arg_parser.add_argument('-r', '--recurse', action='store_true', help='List files recursively.')
+
+    return arg_parser
+
+def get_start(wav, timezone, ff):
+    start = ''
+    curtz = ZoneInfo(timezone)
+
+    if 'guan' in wav.metadata:
+        # holdover for the previous talcap which was using lowercase field names
+        if 'timestamp' in wav.metadata['guan']:
+            start = dt.fromisoformat(wav.metadata['guan']['timestamp'])
+        else:
+            start = dt.fromisoformat(wav.metadata['guan']['Timestamp'])
+    elif 'bext' in wav.metadata:
+        bext_start = dt.fromisoformat(wav.metadata['bext']['End Time'])
+        start = bext_start.replace(tzinfo=curtz) - timedelta(seconds=wav.metadata['Duration'])
+    else:
+        start = dt.strptime(os.path.basename(wav.metadata['File Name']), ff)
+
+    start = start.astimezone(ZoneInfo("UTC")).astimezone(curtz)
+
+    return start
+
+def get_timezone(wav, section, args):
+    timezone = ''
+
+    if 'guan' in wav.metadata and 'NFC|Time Zone' in wav.metadata['guan']:
+        timezone = wav.metadata['guan']['NFC|Time Zone']
+    else:
+        if 'timezone' in section:
+            timezone = section['timezone']
+
+    return timezone
+
+def get_location(wav, section, args):
+    longitude = 0
+    latitude = 0
+
+    if 'guan' in wav.metadata and 'Loc Position' in wav.metadata['guan']:
+        latitude = wav.metadata['guan']['Loc Position'][0]
+        longitude = wav.metadata['guan']['Loc Position'][1]
+    else:
+        if 'longitude' in section:
+            longitude = section['longitude']
+        
+        if 'latitude' in section:
+            latitude = section['latitude']
+
+    return (longitude, latitude)
+
+def isNFC(wav, start, timezone, longitude, latitude):
+        nfc = False
+
+        try:
+            curdate = start.date()
+            stop = start + timedelta(seconds=wav.metadata['Duration'])
+            curtz = ZoneInfo(timezone)
+
+            location=LocationInfo(name='', region='', timezone=timezone, latitude=latitude, longitude=longitude)
+            astrodawn = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
+            astrodusk = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dusk'].replace(microsecond=0)
+
+            if start >= astrodusk or start < astrodawn or stop >= astrodusk or stop < astrodawn:
+                nfc = True
+        except KeyError as e:
+            print(f"{wav.metadata['File Name']}: KeyError {e}")
+
+        return nfc
+
+def json_dt_serialize(obj):
+    if isinstance(obj, (dt, datetime.date)):
+        return obj.isoformat()
+
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+def main():
+    signal.signal(signal.SIGINT, signal_handler)
+
+    arg_parser = ParseCommandLineArguments()
+    args = arg_parser.parse_args()
+
+    metadata_results = []
+    # file_list = []
+    # file_fmts = []
+    find_result = []
+
+    tc = talonlib.TalonConfig(args.config)
+    config = tc.config
+
+    globstr = "*.[wW][aA][vV]"
+
+    # Can only iterate a generator once, so we'll convert it to a list
+    if args.recurse:
+        find_result = list(Path(args.path).rglob(globstr))
+    else:
+        find_result = list(Path(args.path).glob(globstr))
+
+    for section in config:
+        if 'type' in config[section] and config[section]['type'] == 'station':
+            for filename in find_result:
+                try:
+                    if dt.strptime(str(os.path.basename(filename)), config[section]['file_format']):
+                        twf = talonlib.TalonWAVFile(str(filename), section=config[section], taxonomy=[], debug=args.debug)
+                        twf.GetEvents()
+                        metadata_results.append(twf.metadata)
+
+                        timezone = get_timezone(twf, config[section], args)
+                        start = get_start(twf, timezone, config[section]['file_format'])
+
+                        longitude, latitude = get_location(twf, config[section], args)
+                        twf.metadata['NFC'] = isNFC(twf, start, timezone, longitude, latitude)
+
+                        if not args.json:
+                            end = start + timedelta(seconds=twf.metadata['Duration'])
+                            start_str = dt.strftime(start, "%Y-%m-%d %H:%M:%S%z")
+                            end_str =  dt.strftime(end, "%Y-%m-%d %H:%M:%S%z")
+
+                            print(f"{twf.metadata['File Name']:24} {twf.metadata['Actual Size']/1024/1024:7.2f} {twf.metadata['Duration']/60:6.2f} {twf.metadata['fmt']['Channels']:2} {twf.metadata['fmt']['Bits/smp']:3} {twf.metadata['fmt']['Frequency']:6}  {start_str}  {end_str}  {int(twf.metadata['NFC'])}")
+                        # else:
+                        #     print(twf)
+                except ValueError as e:
+                    pass
+
+    if args.json:
+        print(json.dumps(metadata_results, default=json_dt_serialize, indent=4, sort_keys=True))
+
+if __name__ == "__main__":
+    sys.exit(main())

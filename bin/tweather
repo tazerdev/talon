@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import json
+import signal
+import talonlib
+import argparse
+from datetime import datetime as dt
+from zoneinfo import ZoneInfo
+
+def signal_handler(signum, frame):
+    print("CTRL-C detected, exiting.")
+
+    signal.signal(signum, signal.SIG_IGN)
+    sys.exit(0)
+
+def validate_datetime(s):
+    try:
+        return dt.strptime(s, '%Y%m%d-%H:%M:%S')
+    except ValueError:
+        msg = "Not a valid date: '{0}'.".format(s)
+        raise argparse.ArgumentTypeError(msg)
+
+def ParseCommandLineArguments():
+    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="tweather - a utility for viewing weather data for a given location.")
+    arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Path to the talon configuration file.")
+    arg_parser.add_argument('-j', '--json', action='store_true', help='Dump the current observation set as JSON.')
+    arg_parser.add_argument('-l', '--location', type=str, help="The name of a section in the config file.")
+    arg_parser.add_argument('-r', '--refresh', action='store_true', help='Ignore the cache and attempt to download a fresh set of data.')
+    arg_parser.add_argument('-a', '--age', default=15, type=int, help='Age, in minutes, of the most recent cache file after which new data needs to be retrieved.')
+    arg_parser.add_argument('-s', '--samples', default=24, type=int, help='Number data samples, in 5 minute increments, to display.')
+    arg_parser.add_argument('--date', type=validate_datetime, help="Attempt to retrieve (from cache) data for a given single date/time.")
+    arg_parser.add_argument('--si', action='store_false', help='Use the international system of units (SI) instead of the US customary system (USCS).')
+    arg_parser.add_argument('--now', action='store_true', help='Attempt to retrieve, from cache, data for right now.')
+    arg_parser.add_argument('--list', action='store_true', help="List all weather stations for the specified (in the config file or with the -l option) location.")
+    arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
+
+    return arg_parser
+
+def main():
+    signal.signal(signal.SIGINT, signal_handler)
+
+    arg_parser = ParseCommandLineArguments()
+    args = arg_parser.parse_args()
+
+    if os.path.exists(args.config):
+        tc = talonlib.TalonConfig(args.config)
+        config = tc.config
+
+        if not args.location:
+            section = config['general']['default']
+        else:
+            section = args.location
+
+        if section in config and 'weather_station' in config[section]:
+            stationid = config[section]['weather_station']
+        else:
+            stationid = None
+
+        if section in config:
+            tw = talonlib.TalonWeather(config[section]['latitude'], config[section]['longitude'], config[section]['timezone'], debug=args.debug, stationid=stationid, uscs=args.si, cachedir=config['general']['cachedir'])
+
+            if args.list:
+                tw.list_stations()
+            elif args.json:
+                print(json.dumps(tw.observations, indent=4, sort_keys=True))
+            elif args.date:
+                cur_dt = args.date.astimezone(ZoneInfo(config[section]['timezone']))
+                print(tw.get_obs(cur_dt))
+            elif args.now:
+                print(tw.get_obs(now=True))
+            else:
+                forecast = tw.forecast_table(args.samples)
+                observations = tw.observation_table(args.samples)
+
+                max = 0
+
+                for line in forecast.split('\n'):
+                    if len(line) > max:
+                        max = len(line)
+
+                print("Future Forecast")
+                print('-' * max)
+                print(forecast)
+
+                print()
+                max = 0
+
+                for line in observations.split('\n'):
+                    if len(line) > max:
+                        max = len(line)
+
+                print("Recent Observations")
+                print('-' * max)
+                print(observations)
+
+        else:
+             print(f"Section not found in config file: {args.location}")
+    else:
+        print(f"Config file not found: {args.config}")
+
+if __name__ == "__main__":
+    sys.exit(main())

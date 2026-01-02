@@ -1,0 +1,2215 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+from typing import Iterable
+
+import os
+import csv
+import shutil
+import talonlib
+import argparse
+import threading
+import subprocess
+from zoneinfo import ZoneInfo
+
+from datetime import time as dtt
+from datetime import datetime as dt
+from datetime import timedelta
+import sounddevice as sd
+import soundfile as sf
+from pathlib import Path
+
+# begin wxGlade: dependencies
+import wx
+import wx.svg
+import wx.propgrid as wxpg
+import wx.adv
+import wx.propgrid
+import wx.lib.mixins.listctrl
+from wx.lib.masked import TimeCtrl
+import wx.lib.scrolledpanel as scrolled
+# end wxGlade
+
+# Global accelerators (e.g., ctrl-a, ctrl-s)
+ID_SAVE = wx.NewIdRef()
+ID_SELECT_ALL = wx.NewIdRef()
+
+accelerators = [wx.AcceleratorEntry() for x in range(3)]
+accelerators[0].Set(wx.ACCEL_CTRL, ord('S'), ID_SAVE)
+accelerators[2].Set(wx.ACCEL_CTRL, ord('A'), ID_SELECT_ALL)
+
+# Curation identifiers
+CONFIRM = wx.NewIdRef()
+OVERRIDE = wx.NewIdRef()
+EXCLUDE = wx.NewIdRef()
+UNKNOWN = wx.NewIdRef()
+
+# Define notification event for thread completion
+PA_EVT_RESULT_ID = wx.Window.NewControlId()
+GS_EVT_RESULT_ID = wx.Window.NewControlId()
+BN_EVT_RESULT_ID = wx.Window.NewControlId()
+
+def PA_EVT_RESULT(win, func):
+    """Define Result Event."""
+    win.Connect(-1, -1, PA_EVT_RESULT_ID, func)
+
+def GS_EVT_RESULT(win, func):
+    """Define Result Event."""
+    win.Connect(-1, -1, GS_EVT_RESULT_ID, func)
+
+def BN_EVT_RESULT(win, func):
+    """Define Result Event."""
+    win.Connect(-1, -1, BN_EVT_RESULT_ID, func)
+
+class GenerateSpectrographResultEvent(wx.PyEvent):
+    """Simple event to carry arbitrary result data."""
+    def __init__(self, data):
+        """Init Result Event."""
+        wx.PyEvent.__init__(self)
+        self.SetEventType(GS_EVT_RESULT_ID)
+        self.data = data
+
+class PlayAudioResultEvent(wx.PyEvent):
+    """Simple event to carry arbitrary result data."""
+    def __init__(self, data):
+        """Init Result Event."""
+        wx.PyEvent.__init__(self)
+        self.SetEventType(PA_EVT_RESULT_ID)
+        self.data = data
+
+class BirdNETAnalyzeResultEvent(wx.PyEvent):
+    """Simple event to carry arbitrary result data."""
+    def __init__(self, data):
+        """Init Result Event."""
+        wx.PyEvent.__init__(self)
+        self.SetEventType(BN_EVT_RESULT_ID)
+        self.data = data
+
+# Thread class that executes processing
+class GenSpectrographThread(threading.Thread):
+    """GenSpectrographThread Thread Class."""
+    def __init__(self, notify_window, twf, evts, clipdir):
+        """Init GenSpectrographThread Class."""
+        threading.Thread.__init__(self)
+        self._notify_window = notify_window
+        self._want_abort = 0
+        self.twf = twf
+        self.evts = evts
+        self.force = False
+
+        self.clipdir = clipdir
+
+        # This starts the thread running on creation, but you could
+        # also make the GUI thread responsible for calling this
+        self.start()
+
+    def run(self):
+        # force_wave = False
+        count = len(self.evts)
+        index = 0
+
+        for event in self.evts:
+            wx.PostEvent(self._notify_window, GenerateSpectrographResultEvent((index+1, count)))
+
+            if 'overwritewave' in event and event['overwritewave'] == True:
+                self.force = True
+
+            curtwf = os.path.basename(event['filename'])
+
+            # TODO: Figure out how to render an event to the nearesdt .25 and have the graph
+            # not add an extra .25s of blank space at the end.
+            clip_len = event['stop'] - event['start']
+
+            if curtwf in self.twf:
+                self.twf[curtwf].extract_audio(event, 3, self.clipdir, full_height=False, graph=True, force=self.force, debug=False, silent=True)
+
+            event['overwritewave'] = False
+            index += 1
+
+        wx.PostEvent(self._notify_window, GenerateSpectrographResultEvent(None))
+
+    def abort(self):
+        """abort worker thread."""
+        # Method for use by main thread to signal an abort
+        self._want_abort = 1
+
+# Thread class that executes processing
+class PlayAudioThread(threading.Thread):
+    """PlayAudioThread Class."""
+    def __init__(self, notify_window, audioclip):
+        """Init PlayAudioThread Class."""
+        threading.Thread.__init__(self)
+        self._notify_window = notify_window
+        self._want_abort = 0
+        self.audioclip = audioclip
+        # This starts the thread running on creation, but you could
+        # also make the GUI thread responsible for calling this
+        self.start()
+
+    def run(self):
+        if os.path.exists(self.audioclip):
+            data, fs = sf.read(self.audioclip)
+            sd.play(data, fs)
+            sd.wait()
+
+        wx.PostEvent(self._notify_window, PlayAudioResultEvent(10))
+
+    def abort(self):
+        """abort worker thread."""
+        # Method for use by main thread to signal an abort
+        self._want_abort = 1
+
+class TalonListControl(
+    wx.ListCtrl,
+    wx.lib.mixins.listctrl.ColumnSorterMixin,
+    wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin,
+):
+    def __init__(self, panel: wx.Window, headings, alignment, items):
+        self.headings = headings
+        self.items = items
+        self.prevColumn = False
+        self.SortAscending = True
+        
+        # Create a list in report style (the wx.LC_LIST format appears to be unusable)
+        list_style = wx.LC_VRULES | wx.LC_HRULES | wx.LC_REPORT | wx.LC_VIRTUAL
+
+        # Initialise the list and the mixins
+        wx.ListCtrl.__init__(self, panel, style=list_style, id=wx.ID_ANY)
+
+        self.Bind(wx.EVT_LIST_COL_CLICK, self.Sort)
+
+        for column, heading in enumerate(headings):
+            self.AppendColumn(heading, format=alignment[column])
+
+        wx.lib.mixins.listctrl.ColumnSorterMixin.__init__(
+            self,
+            len(headings),
+        )
+
+        wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)
+        self.SetItemCount(len(self.items))
+
+        self.color1 = wx.ItemAttr()
+        self.color1.SetBackgroundColour(wx.Colour(0xff, 0xcb, 0xe1))
+
+        self.color2 = wx.ItemAttr()
+        self.color2.SetBackgroundColour(wx.Colour(0xd6, 0xe5, 0xbd))
+
+        self.color3 = wx.ItemAttr()
+        self.color3.SetBackgroundColour(wx.Colour(0xbc, 0xd8, 0xec))
+
+    def OnGetItemAttr(self, index):
+        # if 12+ items, then we're dealing with detections, not audio files
+        if len(self.items[index]) >= 12:
+            if self.items[index][10] == 'excluded':
+                return self.color1
+            elif self.items[index][10] == 'confirmed':
+                return self.color2
+            elif self.items[index][12]:
+                return self.color3
+            else:
+                return None
+
+    def OnGetItemText(self, item, col):
+        return self.items[item][col]
+    
+    def GetListCtrl(self):
+        """Method required by the ColumnSorterMixin"""
+        return self
+
+    def Sort(self, event):
+        col = event.GetColumn()
+
+        if col != self.prevColumn:
+            self.SortAscending = True
+        else:
+            if self.SortAscending:
+                self.SortAscending = False
+            else:
+                self.SortAscending = True
+
+        if self.SortAscending:
+            self.items.sort(key=lambda x: x[col])
+        else:
+            self.items.sort(key=lambda x: x[col], reverse=True)
+
+        self.prevColumn = col
+
+        self.DeleteAllItems()
+
+        self.SetItemCount(len(self.items))
+
+    def OnSortOrderChanged(self):
+        column, ascending = self.GetSortState()
+        self.ShowSortIndicator(column, ascending)
+
+    def UpdateListContents(self, items):
+        self.DeleteAllItems()
+        self.items = items
+
+        if self.SortAscending:
+            self.items.sort(key=lambda x: x[self.prevColumn])
+        else:
+            self.items.sort(key=lambda x: x[self.prevColumn], reverse=True)
+
+        self.SetItemCount(len(self.items))
+
+    def UpdateListState(self, items):
+        self.items = items
+
+class MyFrame(wx.Frame):
+    def __init__(self, parent, title, config, icon_path):
+        super(MyFrame, self).__init__(parent, title=title, size=(300, 200))
+        
+        self.cwd = os.getcwd()
+        self.globstr = "*.[wW][aA][vV]"
+
+        # this is the default timezone used by talon
+        # if there's no timezone in the metadata
+        self.taxonomy = {}
+        self.audiofiles = []
+        self.detections = []        # this is a simple filtered list which backs our virtual listctrl
+        # self.protocol = 'all'
+        # self.engine = 'all'
+        self.identitylist = []      # this is a simple list comprised of unique species from the current self.td.detections set
+        self.identity = 'all'
+        self.start_dt = dt.now()
+        self.stop_dt = dt.now()
+        self.audioclip = None
+        self.specfile = None
+        self.dirtycache = False
+        self.total_confirmed = 0
+        # self.filter_confirmed = 0
+        self.events = []
+        self.config_path = config
+        self.config = None
+        self.icon_path = icon_path
+        self.audacity_path = None
+        self.files = {}
+        self.sfilter = []
+        self.dlc1_index = -1
+
+        # curation stats
+        self.show_confirmed_curations = True
+        self.show_excluded_curations = True
+        self.show_unconfirmed_curations = True
+        self.show_nighthawk_detections = True
+        self.show_birdnet_detections = True
+        self.show_diurnal_detections = True
+        self.show_nocturnal_detections = True
+        self.show_nfc_detections = True
+
+        # TODO: read defaults from the config file
+        # user specified
+        self.threshold = .25
+
+        # These are global settings that apply to all files
+        self.latitude = None
+        self.longitude = None
+        self.timezone = None
+        self.section = None
+
+        # TODO: look into saving the previous working directory somewhere
+        # so it can be reopened quicklky
+        # self.lastdir = "C:/Users/mark/devel/demo/nextgen/10/20241002"
+
+        # ------------------------------------------------------------------------------
+        # Menu Bar: Begin
+        # ------------------------------------------------------------------------------
+        self.frame_menubar = wx.MenuBar()
+        wxglade_tmp_menu = wx.Menu()
+
+        self.menu_open_id = wx.NewIdRef()
+        wxglade_tmp_menu.Append(self.menu_open_id, "&Open\tCtrl+O", "Open a new folder.")
+        self.Bind(wx.EVT_MENU, self.directory_btn_Push, id=self.menu_open_id)
+
+        self.menu_save_id = wx.NewIdRef()
+        wxglade_tmp_menu.Append(self.menu_save_id, "&Save\tCtrl+S", "Save changes.")
+        self.Bind(wx.EVT_MENU, self.accelerator_Save, id=self.menu_save_id)
+
+        wxglade_tmp_menu.AppendSeparator()
+
+        self.menu_exit_id = wx.ID_EXIT   
+        wxglade_tmp_menu.Append(self.menu_exit_id, "E&xit\tCtrl+Q", "Exit the program.")
+        self.Bind(wx.EVT_MENU, self.on_close, id=self.menu_exit_id)
+        
+        self.frame_menubar.Append(wxglade_tmp_menu, "File")
+        wxglade_tmp_menu = wx.Menu()
+        wxglade_tmp_menu.Append(wx.ID_ANY, "Preferences", "")
+        self.frame_menubar.Append(wxglade_tmp_menu, "Edit")
+
+        wxglade_tmp_menu = wx.Menu()
+
+        self.menu_about_id = wx.ID_ABOUT
+        wxglade_tmp_menu.Append(self.menu_about_id, "About", "")
+        self.Bind(wx.EVT_MENU, self.OnAbout, id=self.menu_about_id)
+
+        self.frame_menubar.Append(wxglade_tmp_menu, "Help")
+
+        self.SetMenuBar(self.frame_menubar)
+
+        # ------------------------------------------------------------------------------
+        # Status Bar: Begin
+        # ------------------------------------------------------------------------------
+        self.frame_statusbar = self.CreateStatusBar(1)
+        self.frame_statusbar.SetStatusWidths([-1])
+
+        frame_statusbar_fields = ["Ready."]
+
+        for i in range(len(frame_statusbar_fields)):
+            self.frame_statusbar.SetStatusText(frame_statusbar_fields[i], i)
+
+        # ------------------------------------------------------------------------------
+        # Tool Bar: Begin
+        # ------------------------------------------------------------------------------
+        of_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "open.svg"))
+        of_bm = of_svg.ConvertToScaledBitmap(wx.Size(32, 32))
+
+        rf_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "refresh.svg"))
+        rf_bm = rf_svg.ConvertToScaledBitmap(wx.Size(32, 32))
+
+        ts_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "timeseries.svg"))
+        ts_bm = ts_svg.ConvertToScaledBitmap(wx.Size(32, 32))
+
+        ck_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "checklist.svg"))
+        ck_bm = ck_svg.ConvertToScaledBitmap(wx.Size(32, 32))
+
+        wt_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "weather.svg"))
+        wt_bm = wt_svg.ConvertToScaledBitmap(wx.Size(32, 32))
+
+        self.frame_toolbar = wx.ToolBar(self, -1, style=wx.TB_HORIZONTAL)
+        self.frame_toolbar.AddTool(1, "Open Folder", of_bm, wx.NullBitmap, wx.ITEM_NORMAL, "Open Folder", "Open a folder containing audio files.")
+        self.frame_toolbar.AddTool(2, "Reload Folder", rf_bm, wx.NullBitmap, wx.ITEM_NORMAL, "Reload Folder", "Reload contents of current directory.")
+        self.frame_toolbar.AddTool(3, "Generate Time Series Graph", ts_bm, wx.NullBitmap, wx.ITEM_NORMAL, "Generate Time Series Graph", "Generate Time Series Graph.")
+        self.frame_toolbar.AddTool(4, "Generate Checklists", ck_bm, wx.NullBitmap, wx.ITEM_NORMAL, "Generate Checklists", "Generate Checklists.")
+        self.frame_toolbar.AddTool(5, "Download Weather Data", wt_bm, wx.NullBitmap, wx.ITEM_NORMAL, "Download Weather Data", "Download Weather Data.")
+
+        self.Bind(wx.EVT_TOOL, self.directory_btn_Push, id=1)
+        self.Bind(wx.EVT_TOOL, self.refresh_btn_Push, id=2)
+        self.Bind(wx.EVT_TOOL, self.generate_timeseries_graph, id=3)
+        self.Bind(wx.EVT_TOOL, self.generate_checklists, id=4)
+        self.Bind(wx.EVT_TOOL, self.get_weather, id=5)
+        self.frame_toolbar.AddSeparator()
+
+        self.identity_cbx = wx.ComboBox(self.frame_toolbar, wx.ID_ANY, choices=self.identitylist)
+        self.identity_cbx.SetInitialSize((200, -1))
+        self.identity_cbx.Bind(wx.EVT_COMBOBOX, self.identity_cbx_Select)
+        self.frame_toolbar.AddControl(self.identity_cbx)
+
+        self.frame_toolbar.AddSeparator()
+
+        self.threshold_spn = wx.SpinCtrlDouble(self.frame_toolbar, wx.ID_ANY, initial=self.threshold, min=0.0, max=1.0)
+        self.threshold_spn.SetDigits(2)
+        self.threshold_spn.SetIncrement(.01)
+        self.threshold_spn.SetInitialSize((55, -1))
+        self.threshold_spn.Bind(wx.EVT_SPINCTRLDOUBLE, self.threshold_spn_Change)
+        self.frame_toolbar.AddControl(self.threshold_spn)
+
+        self.frame_toolbar.AddSeparator()
+
+        self.start_dpck = wx.adv.DatePickerCtrl(self.frame_toolbar, wx.ID_ANY)
+        self.start_dpck.Bind(wx.adv.EVT_DATE_CHANGED, self.datetime_pck_Change)
+        self.frame_toolbar.AddControl(self.start_dpck)
+        
+        self.start_tpck = wx.adv.TimePickerCtrl(self.frame_toolbar, wx.ID_ANY)
+        self.start_tpck.Bind(wx.adv.EVT_TIME_CHANGED, self.datetime_pck_Change)
+        self.frame_toolbar.AddControl(self.start_tpck)
+        self.frame_toolbar.AddSeparator()
+
+        self.stop_dpck = wx.adv.DatePickerCtrl(self.frame_toolbar, wx.ID_ANY)
+        self.stop_dpck.Bind(wx.adv.EVT_DATE_CHANGED, self.datetime_pck_Change)
+        self.frame_toolbar.AddControl(self.stop_dpck)
+
+        self.stop_tpck = wx.adv.TimePickerCtrl(self.frame_toolbar, wx.ID_ANY)
+        self.stop_tpck.Bind(wx.adv.EVT_TIME_CHANGED, self.datetime_pck_Change)
+        self.frame_toolbar.AddControl(self.stop_tpck)
+        
+        self.SetToolBar(self.frame_toolbar)
+        self.frame_toolbar.Realize()
+
+        # ------------------------------------------------------------------------------
+        # Notebook: Begin
+        # ------------------------------------------------------------------------------
+        self.panel_1 = wx.Panel(self, wx.ID_ANY)
+        sizer_1 = wx.BoxSizer(wx.VERTICAL)
+        self.notebook_2 = wx.Notebook(self.panel_1, wx.ID_ANY)
+        sizer_1.Add(self.notebook_2, 1, wx.EXPAND, 0)
+
+        # ------------------------------------------------------------------------------
+        # Audio Metadata: Begin
+        # ------------------------------------------------------------------------------
+        self.notebook_2_pane_1 = wx.Panel(self.notebook_2, wx.ID_ANY, style=wx.FULL_REPAINT_ON_RESIZE | wx.TAB_TRAVERSAL)
+        self.notebook_2.AddPage(self.notebook_2_pane_1, "Audio Files")
+
+        sizer_17 = wx.BoxSizer(wx.VERTICAL)
+
+        self.window_2 = wx.SplitterWindow(self.notebook_2_pane_1, wx.ID_ANY, style=wx.SP_3D | wx.SP_LIVE_UPDATE)
+        self.window_2.SetMinimumPaneSize(20)
+        sizer_17.Add(self.window_2, 1, wx.EXPAND, 0)
+
+        self.window_2_pane_1 = wx.Panel(self.window_2, wx.ID_ANY)
+        sizer_18 = wx.BoxSizer(wx.HORIZONTAL)
+
+        alc1_column_names = [ "Filename", "Date", "Time", "Duration", "Events" ]
+        alc1_column_align = [ wx.LIST_FORMAT_LEFT, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_RIGHT]
+        self.alc1 = TalonListControl(self.window_2_pane_1, alc1_column_names, alc1_column_align, self.audiofiles)
+        self.alc1.Bind(wx.EVT_LIST_ITEM_SELECTED, handler=self.alc1_selection_Change)
+        self.alc1.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, handler=self.alc1_item_right_click)
+        sizer_18.Add(self.alc1, 1, wx.EXPAND, 0)
+
+        self.window_2_pane_2 = wx.Panel(self.window_2, wx.ID_ANY)
+        sizer_19 = wx.BoxSizer(wx.HORIZONTAL)
+        self.pg1 = wx.propgrid.PropertyGrid(self.window_2_pane_2, wx.ID_ANY)
+
+        self.pg1.Append(wxpg.PropertyCategory("Location Details"))
+        self.pg1.Append(wxpg.StringProperty('Name', 'name'))
+        self.pg1.Append(wxpg.StringProperty('Location', 'location'))
+        self.pg1.Append(wxpg.StringProperty('Elevation', 'elevation'))
+        self.pg1.Append(wxpg.FloatProperty('Latitude', 'latitude'))
+        self.pg1.Append(wxpg.FloatProperty('Longitude', 'longitude'))
+        self.pg1.Append(wxpg.StringProperty('Time Zone', 'timezone'))
+        self.pg1.Append(wxpg.StringProperty('Copyright', 'copyright'))
+
+        self.pg1.Append(wxpg.PropertyCategory("Audio Details"))
+        self.pg1.Append(wxpg.StringProperty('File Name', 'filename'))
+        self.pg1.Append(wxpg.IntProperty('File Size:', 'filesize'))
+        self.pg1.Append(wxpg.StringProperty('Modified', 'modified'))
+        self.pg1.Append(wxpg.FloatProperty('Duration', 'duration'))
+        self.pg1.Append(wxpg.IntProperty('Sample Rate (Hz)', 'sample_rate'))
+        self.pg1.Append(wxpg.IntProperty('Channels', 'channels'))
+        self.pg1.Append(wxpg.IntProperty('Bit Depth', 'bit_depth'))
+
+        self.pg1.Append(wxpg.PropertyCategory("Hardware Details"))
+        self.pg1.Append(wxpg.StringProperty('Make', 'make'))
+        self.pg1.Append(wxpg.StringProperty('Model', 'model'))
+        self.pg1.Append(wxpg.StringProperty('Serial', 'serial'))
+        self.pg1.Append(wxpg.StringProperty('Note', 'note'))
+
+        self.pg1.Append(wxpg.PropertyCategory("Detections"))
+        self.pg1.Append(wxpg.IntProperty('Nighthawk', 'nighthawk'))
+        self.pg1.Append(wxpg.IntProperty('BirdNET', 'birdnet'))
+
+        self.pg1.Grid.FitColumns()
+        self.pg1.Bind( wxpg.EVT_PG_CHANGED, self.audiofile_pg_Change )
+        self.pg1.MakeColumnEditable(0)
+
+        sizer_19.Add(self.pg1, 1, wx.EXPAND, 0)
+
+        # ------------------------------------------------------------------------------
+        # Detections List: Begin
+        # ------------------------------------------------------------------------------
+        self.notebook_2_Detections = wx.Panel(self.notebook_2, wx.ID_ANY)
+        self.notebook_2.AddPage(self.notebook_2_Detections, "Detections")
+
+        sizer_14 = wx.BoxSizer(wx.HORIZONTAL)
+        self.window_1 = wx.SplitterWindow(self.notebook_2_Detections, wx.ID_ANY, style=wx.SP_3D | wx.SP_LIVE_UPDATE)
+        self.window_1.SetMinimumPaneSize(30)
+        sizer_14.Add(self.window_1, 1, wx.EXPAND, 0)
+
+        self.window_1_pane_1 = wx.Panel(self.window_1, wx.ID_ANY)
+
+        sizer_15 = wx.BoxSizer(wx.HORIZONTAL)
+        dlc1_column_names = [ "Date", "Time", "Start", "Probability", "Engine", "Protocol", "Common Name" ]
+        dlc1_column_align = [ wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_CENTER, wx.LIST_FORMAT_LEFT ]
+        self.dlc1 = TalonListControl(self.window_1_pane_1, dlc1_column_names, dlc1_column_align, self.detections)
+        self.dlc1.Bind(wx.EVT_LIST_ITEM_SELECTED, handler=self.dlc1_selection_Change)
+        self.dlc1.Bind(wx.EVT_LIST_ITEM_ACTIVATED, handler=self.dlc1_item_Activate)
+        self.dlc1.Bind(wx.EVT_RIGHT_DOWN, handler=self.dlc1_item_right_click)
+        self.dlc1.Bind(wx.EVT_KEY_DOWN, handler=self.dlc1_KeyHandler)
+        sizer_15.Add(self.dlc1, 1, wx.EXPAND, 0)
+
+        self.window_1_pane_2 = wx.Panel(self.window_1, wx.ID_ANY)
+        sizer_16 = wx.BoxSizer(wx.HORIZONTAL)
+        self.image_1 = None
+        self.bitmap_1 = wx.StaticBitmap(self.window_1_pane_2, wx.ID_ANY, wx.Bitmap(), wx.DefaultPosition, wx.DefaultSize, 0)
+        sizer_16.Add(self.bitmap_1, 0, 0, 0)
+        self.bitmap_1.Bind(wx.EVT_RIGHT_DOWN, self.bitmap_1_right_click)
+
+        self.window_1_pane_2.Bind(wx.EVT_SIZE, self.frame_Resize)
+
+        # ------------------------------------------------------------------------------
+        # Time Series: Begin
+        # ------------------------------------------------------------------------------
+        self.tspanel = wx.Panel(self.notebook_2, wx.ID_ANY)
+        self.notebook_2.AddPage(self.tspanel, "Time Series")
+        sizer_22 = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.image_2 = None
+        self.bitmap_2 = wx.StaticBitmap(self.tspanel, wx.ID_ANY, wx.Bitmap(), wx.DefaultPosition, wx.DefaultSize, 0)
+        sizer_22.Add(self.bitmap_2, 0, 0, 0)
+        self.tspanel.Bind(wx.EVT_SIZE, self.frame_Resize)
+        self.bitmap_2.Bind(wx.EVT_RIGHT_DOWN, self.bitmap_2_right_click)
+
+        self.tspanel.SetSizer(sizer_22)
+
+        # ------------------------------------------------------------------------------
+        # Checklist: Begin
+        # ------------------------------------------------------------------------------
+        self.chklstpanel = wx.Panel(self.notebook_2, wx.ID_ANY)
+        self.notebook_2.AddPage(self.chklstpanel, "Checklists")
+
+        sizer_23 = wx.BoxSizer(wx.HORIZONTAL)
+        self.chklst_txtctrl = wx.TextCtrl(self.chklstpanel, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_READONLY)
+        sizer_23.Add(self.chklst_txtctrl, 1, wx.EXPAND | wx.ALL, 1)
+
+        chklst_font = wx.Font(10, wx.MODERN, wx.NORMAL, wx.NORMAL, False, u'Courier New')
+        self.chklst_txtctrl.SetFont(chklst_font)
+        self.chklstpanel.SetSizer(sizer_23)
+
+        # ------------------------------------------------------------------------------
+        # Weather: Begin
+        # ------------------------------------------------------------------------------
+        self.weatherpanel = wx.Panel(self.notebook_2, wx.ID_ANY)
+        self.notebook_2.AddPage(self.weatherpanel, "Weather")
+
+        sizer_24 = wx.BoxSizer(wx.HORIZONTAL)
+        self.weather_txtctrl = wx.TextCtrl(self.weatherpanel, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_READONLY)
+        sizer_24.Add(self.weather_txtctrl, 1, wx.EXPAND | wx.ALL, 1)
+
+        weather_font = wx.Font(10, wx.MODERN, wx.NORMAL, wx.NORMAL, False, u'Courier New')
+        self.weather_txtctrl.SetFont(weather_font)
+        self.weatherpanel.SetSizer(sizer_24)
+
+        # ------------------------------------------------------------------------------
+        # Summary: Begin
+        # ------------------------------------------------------------------------------
+        self.window_1_pane_2.SetSizer(sizer_16)
+        self.window_1_pane_1.SetSizer(sizer_15)
+        self.window_1.SplitVertically(self.window_1_pane_1, self.window_1_pane_2)
+        self.notebook_2_Detections.SetSizer(sizer_14)
+        self.window_2_pane_2.SetSizer(sizer_19)
+        self.window_2_pane_1.SetSizer(sizer_18)
+        self.window_2.SplitVertically(self.window_2_pane_1, self.window_2_pane_2)
+        self.notebook_2_pane_1.SetSizer(sizer_17)
+        self.panel_1.SetSizer(sizer_1)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+
+        # Set up global accelerators
+        accel=wx.AcceleratorTable(accelerators)
+        self.SetAcceleratorTable(accel)
+        self.Bind(wx.EVT_MENU, self.accelerator_Save, id=ID_SAVE)
+        self.Bind(wx.EVT_MENU, self.accelerator_SelectAll, id=ID_SELECT_ALL)
+
+        # Set up event handler for any worker thread results
+        PA_EVT_RESULT(self,self.play_audio_thread_Result)
+        GS_EVT_RESULT(self,self.generate_spectrograph_thread_Result)
+
+        # And indicate we don't have a worker thread yet
+        self.play_worker = None
+        self.clip_worker = None
+        self.bn_worker = None
+
+        # this disables the toolbar and menus from updating the status bar
+        # which clears thread update messages
+        self.SetStatusBarPane(-1)
+
+        self.SetSize((800, 600))
+        self.SetTitle("talon")
+        self.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
+        self.Layout()
+
+        # next to last thing we do is initialize the interface by getting
+        # directory contents
+        self.cwd = os.getcwd()
+        self.Show()
+
+        self.initialize()
+        # end wxGlade
+
+    def initialize(self):
+        self.dirtycache = False
+        self.frame_statusbar.SetLabel(f"Loading detections from {self.cwd}")
+
+        # TODO: warn if self.config doesn't exist
+        tc = talonlib.TalonConfig(self.config_path)
+        self.config = tc.config
+
+        find_result = []
+        taxonomy = {}
+        groupcodexref = {}
+        self.files = {}
+        self.events = []
+
+        if 'general' in self.config and 'species_filter' in self.config['general']:
+            # load common names and group code cross-reference
+            if os.path.exists(self.config['general']['species_filter']):
+                with open(self.config['general']['species_filter'], mode='r', encoding="utf-8") as infile:
+                    reader = csv.reader(infile)
+                    self.sfilter = { row[0]:float(row[1]) for row in reader }
+
+        if 'taxonomy' in self.config and 'ebird_taxonomy' in self.config['taxonomy']:
+            # load common names and group code cross-reference
+            if os.path.exists(self.config['taxonomy']['ebird_taxonomy']):
+                with open(self.config['taxonomy']['ebird_taxonomy'], mode='r', encoding="utf-8") as infile:
+                    reader = csv.reader(infile)
+                    taxonomy = { row[2]:row[4] for row in reader }
+
+        if 'taxonomy' in self.config and 'group_code_xref' in self.config['taxonomy']:
+            if os.path.exists(self.config['taxonomy']['group_code_xref']):
+                with open(self.config['taxonomy']['group_code_xref'], mode='r', encoding="utf-8") as infile:
+                    reader = csv.reader(infile)
+                    groupcodexref = { row[0]:row[1] for row in reader }
+
+        if 'general' in self.config and 'audacity_path' in self.config['general']:
+            if os.path.exists(self.config['general']['audacity_path']):
+                self.audacity_path = self.config['general']['audacity_path']
+
+        taxonomy = taxonomy | groupcodexref
+        self.taxonomy = taxonomy
+
+        globstr = "*.[wW][aA][vV]"
+
+        find_result = list(Path(self.cwd).glob(globstr))
+        self.chklst_txtctrl.Clear()
+
+        num_files = len(find_result)
+
+        i = 0
+
+        for section in self.config:
+            if 'type' in self.config[section] and self.config[section]['type'] == 'station':
+                if len(find_result) > 0:
+                    for filename in find_result:
+                        try:
+                            self.frame_statusbar.SetStatusText(f"Reading metadata from file {i} of {num_files}")
+                            curfile = talonlib.TalonWAVFile(filename, self.config[section], taxonomy)
+                            self.files[curfile.metadata['File Name']] = curfile
+
+                            self.latitude = self.config[section]['latitude']
+                            self.longitude = self.config[section]['longitude']
+                            self.timezone = self.config[section]['timezone']
+                            self.section = section
+                            self.description = self.config[section]['name']
+
+                            i += 1
+                        except ValueError as e:
+                            pass
+
+        for file in self.files:
+            self.files[file].GetEvents()
+            self.events += self.files[file].metadata['Events']
+
+        # remove unwanted entries
+        self.events = [d for d in self.events if d['common_name'] not in self.sfilter or d['probability'] > self.sfilter[d['common_name']]]
+
+
+        self.build_audiofiles_list()
+        self.alc1.UpdateListContents(self.audiofiles)
+        self.alc1_selection_Change(None)
+
+        uid = 1
+
+        for event in self.events:
+            event['uid'] = uid
+            uid += 1
+
+        if self.events:
+            # sort the event list to ensure we have min/max datetimes
+            evts = sorted(self.events, key=lambda d: d['dt'])
+
+            self.start_dt = evts[0]['dt']
+            self.stop_dt = evts[-1]['dt']
+
+            self.start_dpck.SetValue(self.start_dt)
+            self.start_tpck.SetValue(self.start_dt)
+
+            self.stop_dpck.SetValue(self.stop_dt)
+            self.stop_tpck.SetValue(self.stop_dt)
+
+            # TODO: Devise a better method for handling timezones.
+            # update the default timezone to whatever was in the metadata of the first file
+            self.timezone = 'US/Eastern' # self.files[0].metadata['Section']['timezone']
+
+            self.identity = 'all'
+            self.build_detections_list()
+            self.dlc1.UpdateListContents(self.detections)
+
+            self.build_identity_list()
+
+            self.identity_cbx.Clear()
+            self.identity_cbx.SetItems(self.identitylist)
+            self.identity_cbx.SetSelection(0)
+        else:
+            self.dlc1.DeleteAllItems()
+            self.audioclip = None
+            self.specfile = None
+            self.image_1 = None
+            self.bitmap_1.SetBitmap(wx.Bitmap())
+
+        # self.generate_timeseries_graph()
+        self.frame_statusbar.SetLabel(f"Done.")
+        self.update_detection_status_label()
+
+    def audiofile_pg_Change(self, event):
+        p = event.GetProperty()
+        if p:
+            print(f'{p.GetName()} changed to "{p.GetValueAsString()}"')
+
+    def refresh_btn_Push(self, evt):
+        result = wx.ID_YES
+        
+        # TODO: find all overridden events, which haven't been saved
+        # and remove their specfiles and audioclips; somehow.
+        if self.dirtycache:
+            dialog = wx.MessageDialog(
+                self,
+                "You have unsaved curations which will be lost if you refresh this directory. Would you like to continue?",
+                "Continue",
+                wx.YES_NO | wx.ICON_QUESTION,
+            )
+
+            result = dialog.ShowModal()
+            dialog.Destroy()
+
+        if result == wx.ID_YES:
+            self.initialize()
+
+    def directory_btn_Push(self, evt):
+        result = wx.ID_YES
+        
+        if self.dirtycache:
+            dialog = wx.MessageDialog(
+                self,
+                "You have unsaved curations which will be lost if you change directories. Would you like to continue?",
+                "Continue",
+                wx.YES_NO | wx.ICON_QUESTION,
+            )
+
+            result = dialog.ShowModal()
+            dialog.Destroy()
+
+        if result == wx.ID_YES:
+            dlg = wx.DirDialog(self, "Choose a directory:", style=wx.DD_DEFAULT_STYLE)
+
+            # load selected directory
+            if dlg.ShowModal() == wx.ID_OK:
+                self.cwd = dlg.GetPath()
+                self.SetTitle(f"Talon - {self.cwd}")
+                self.initialize()
+                self.alc1.Select(0)
+                self.dlc1.Select(0)
+            dlg.Destroy()
+
+            # load the time series chart if present
+            curpath = os.path.join(self.cwd, "timeseries.png")
+
+            if os.path.exists(curpath):
+                frame_size = self.tspanel.GetSize()
+                frame_w = int((frame_size[0]))
+                frame_h = int((frame_size[1]))
+                self.image_2 = wx.Image(curpath, wx.BITMAP_TYPE_ANY)
+                img2 = self.image_2.Scale(frame_w, frame_h, wx.IMAGE_QUALITY_BICUBIC)
+                self.bitmap_2.SetBitmap(wx.Bitmap(img2))
+            else:
+                self.image_2 = None
+                self.bitmap_2.SetBitmap(wx.Bitmap())
+
+    def build_audiofiles_list(self):
+        self.audiofiles = []
+
+        for file in self.files:
+            cur = self.files[file]
+
+            curpath, filename = os.path.split(cur.metadata['File Name'])
+
+            self.audiofiles.append(
+                (
+                    filename,
+                    cur._timestamp.strftime('%m/%d/%Y'),
+                    cur._timestamp.strftime('%H:%M:%S%z'),
+                    f"{cur.metadata['Duration']:0.2f}",
+                    f"{len(cur.metadata['Events'])}"
+                )
+            )
+
+    def build_detections_list(self):
+        self.detections = []
+        self.td_detections = []
+        self.total_confirmed = 0
+ 
+        for det in self.events:
+            if (det['protocol'] == 'day' and self.show_diurnal_detections) or (det['protocol'] == 'noc' and self.show_nocturnal_detections) or (det['protocol'] == 'nfc' and self.show_nfc_detections):
+                if (det['disposition'] == 'confirmed' and self.show_confirmed_curations) or (det['disposition'] == 'excluded' and self.show_excluded_curations) or (det['disposition'] == 'unconfirmed' and self.show_unconfirmed_curations):
+                    if det['dt'] >= self.start_dt and det['dt'] <= self.stop_dt:
+                        if det['probability'] >= self.threshold:
+                            if (det['engine'] == 'ta') or (det['engine'] == 'bn' and self.show_birdnet_detections) or (det['engine'] == 'nh' and self.show_nighthawk_detections):
+                                if det['engine'] == 'nh':
+                                    common_name = f"{det['common_name']} ({det['species_code']})"
+                                    orig_engine = det['engine']
+                                else:
+                                    common_name = det['common_name']
+                                    orig_engine = det['engine']
+
+                                if common_name in self.identity or self.identity.lower() == 'all':
+                                    self.detections.append(
+                                        [
+                                            det['dt'].strftime('%m/%d/%Y'),
+                                            det['dt'].strftime('%H:%M:%S%z'),
+                                            det['start_rel'],
+                                            f"{det['probability']*100:0.2f}%",
+                                            det['engine'],
+                                            det['protocol'],
+                                            common_name,
+                                            det['species_code'],
+                                            det['filename'],
+                                            det['uid'],
+                                            det['disposition'],
+                                            orig_engine,
+                                            det['overridden']
+                                        ]
+                                    )
+
+    def build_identity_list(self):
+        self.identitylist = []
+
+        for ev in self.detections:
+            if not ev[6] in self.identitylist:
+                self.identitylist.append(ev[6])
+
+        self.identitylist.sort()
+        self.identitylist.insert(0, 'ALL')
+
+        self.identity_cbx.Clear()
+        self.identity_cbx.SetItems(self.identitylist)
+        self.identity_cbx.SetSelection(0)
+
+    def keykandler_letter_a(self):
+        if os.path.exists(self.audacity_path):
+            if self.audioclip and os.path.exists(self.audioclip):
+                subprocess.Popen([self.audacity_path, self.audioclip])
+            else:
+                dialog = wx.MessageDialog(
+                    self,
+                    f"Audio clip not found.",
+                    "Audacity",
+                    wx.OK | wx.ICON_INFORMATION
+                )
+
+                dialog.ShowModal()
+                dialog.Destroy()
+        else:
+            dialog = wx.MessageDialog(
+                self,
+                f"Unable to locate the Audacity binary at {self.audacity_path}.",
+                "Audacity",
+                wx.OK | wx.ICON_INFORMATION
+            )
+
+            dialog.ShowModal()
+            dialog.Destroy()
+
+    def keyhandler_letter_o(self):
+        index = self.dlc1.GetFirstSelected()
+        last = index
+        dlg = override_dialog(self)
+        new_species_code = None
+
+        if index != -1:
+            for cur in self.events:
+                if cur['uid'] == self.detections[index][9]:
+                    dlg.populate(cur)
+                    dlg.set_taxonomy(list(self.taxonomy.values()))
+
+        if dlg.ShowModal() == wx.ID_OK:
+            new_common_name = dlg.text_ctrl_1.Value
+            new_species_code = [name for name, cn in self.taxonomy.items() if cn == new_common_name]
+
+            # in the event that we receive a common name that's not in the taxonomy list
+            if len(new_species_code) > 0:
+                new_species_code = new_species_code[0]
+            else:
+                new_species_code = dlg.text_ctrl_1.Value
+
+            # new_species_code = dlg.text_ctrl_1.Value
+            new_start = dlg.spin_ctrl_double_1.Value
+            new_stop = dlg.spin_ctrl_double_2.Value
+
+            for det in self.events:
+                if det['uid'] == self.detections[index][9]:
+                    last = index
+                    self.dirtycache = True
+
+                    # curated
+                    self.detections[index][10] = True
+                    det['curated'] = True
+
+                    # overridden
+                    self.detections[index][12] = True
+                    det['overridden'] = True
+
+                    if new_species_code:
+                        # common_name
+                        self.detections[index][6] = new_common_name
+                        det['common_name'] = new_common_name
+
+                        # species_code
+                        self.detections[index][7] = new_species_code
+                        det['species_code'] = new_species_code
+                    else:
+                        # common_name
+                        self.detections[index][6] = dlg.text_ctrl_1.Value
+                        det['common_name'] = dlg.text_ctrl_1.Value
+
+                        # species_code
+                        self.detections[index][7] = ''
+                        det['species_code'] = ''
+
+                    # calculate the start time relative to the beginning of the WAV file
+                    mins, secs = divmod(new_start, 60)
+                    hours, mins = divmod(mins, 60)
+                    start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
+
+                    delta = det['start'] - new_start
+                    det['dt'] = det['dt'] - timedelta(seconds=float(delta))
+
+                    det['start'] = new_start
+                    det['stop'] = new_stop
+                    det['start_rel'] = start_rel
+                    det['engine'] = 'ta'
+                    self.detections[index][4] = 'ta'
+
+                    # TODO:
+                    # generate new clipfile and specfile for overridden detection
+
+            self.build_detections_list()
+            self.update_detection_status_label()
+            self.dlc1.UpdateListContents(self.detections)
+            self.build_identity_list()
+
+            self.dlc1.Select(last)
+            self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+
+            if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
+                self.dlc1.Focus(self.dlc1.GetFirstSelected())
+
+        dlg.Destroy()
+
+    def keyhandler_letter_c(self):
+        index = self.dlc1.GetFirstSelected()
+        last = index
+
+        while True:
+            if index != -1:
+                for det in self.events:
+                    if det['uid'] == self.detections[index][9]:
+                        if det['disposition'] != 'confirmed':
+                            self.detections[index][10] = 'confirmed'
+                            det['disposition'] = 'confirmed'
+                            det['curated'] = True
+                            self.dirtycache = True
+
+                last = index
+                index = self.dlc1.GetNextSelected(index)
+            else:
+                break
+
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.build_identity_list()
+
+        if not self.show_confirmed_curations:
+            self.dlc1.Select(last)
+            self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+        else:
+            self.dlc1.Select(last+1)
+            self.dlc1.Focus(self.dlc1.GetNextSelected(last+1))
+
+        if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
+            self.dlc1.Focus(self.dlc1.GetFirstSelected())
+
+    def keyhandler_letter_x(self):
+        # build a list of items to exclude
+        index = self.dlc1.GetFirstSelected()
+        last = index
+
+        while True:
+            if index != -1:
+                for det in self.events:
+                    if det['uid'] == self.detections[index][9]:
+                        if det['disposition'] != 'excluded':
+                            self.detections[index][10] = 'excluded'
+                            det['disposition'] = 'excluded'
+                            det['curated'] = True
+                            self.dirtycache = True
+
+                last = index
+                index = self.dlc1.GetNextSelected(index)
+            else:
+                break
+
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.build_identity_list()
+
+        self.dlc1.SetFocus()
+
+        # print(self.detections[last][9])
+        if not self.show_excluded_curations:
+            self.dlc1.Select(last)
+            self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+        else:
+            self.dlc1.Select(last+1)
+            self.dlc1.Focus(self.dlc1.GetNextSelected(last+1))
+
+        if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
+            self.dlc1.Focus(self.dlc1.GetFirstSelected())
+
+    def keyhandler_letter_r(self):
+        # build a list of items to reset
+        index = self.dlc1.GetFirstSelected()
+        last = index
+        
+        while True:
+            if index != -1:
+                for det in self.events:
+                    if det['uid'] == self.detections[index][9]:
+                        self.dirtycache = True
+
+                        det['common_name'] = det['orig_common_name']
+                        self.detections[index][6] = det['orig_common_name']
+
+                        det['species_code'] = det['orig_species']
+                        self.detections[index][7] = det['orig_species']
+
+                        det['disposition'] = 'unconfirmed'
+                        self.detections[index][10] = 'unconfirmed'
+
+                        det['engine'] = det['orig_engine']
+
+                        # calculate the start time relative to the beginning of the WAV file
+                        mins, secs = divmod(det['orig_start'], 60)
+                        hours, mins = divmod(mins, 60)
+                        start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
+
+                        delta = det['start'] - det['orig_start']
+                        det['dt'] = det['dt'] - timedelta(seconds=float(delta))
+
+                        det['start'] = det['orig_start']
+                        det['stop'] = det['orig_stop']
+                        det['start_rel'] = start_rel
+
+                        det['curated'] = True
+                        det['overwritewave'] = True
+                        det['overridden'] = False
+
+                index = self.dlc1.GetNextSelected(index)
+            else:
+                break
+
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.build_identity_list()
+        self.dlc1.UpdateListContents(self.detections)
+
+        self.dlc1.Select(last+1)
+
+        if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
+            self.dlc1.Focus(self.dlc1.GetFirstSelected())
+
+    def dlc1_KeyHandler(self, event):
+        keycode = event.GetKeyCode()
+
+        # letter a - Audacity
+        if keycode == 65:
+            self.keykandler_letter_a()
+        # letter o - Override
+        elif keycode == 79:
+            self.keyhandler_letter_o()
+        # letter c - Confirm
+        elif keycode == 67:
+            self.keyhandler_letter_c()
+        # letter x - eXclude
+        elif keycode == 88:
+            self.keyhandler_letter_x()
+        # letter r - Restore
+        elif keycode == 82:
+            self.keyhandler_letter_r()
+        else:
+            event.Skip()
+
+    def identity_cbx_Select(self, evt):
+        self.identity = self.identity_cbx.GetString(evt.GetSelection())
+        self.build_detections_list()
+        self.dlc1.UpdateListContents(self.detections)
+
+        self.update_detection_status_label()
+
+    def update_detection_status_label(self):
+        c = len([d for d in self.events if d['disposition'] == 'confirmed'])
+        x = len([d for d in self.events if d['disposition'] == 'excluded'])
+        o = len([d for d in self.events if d['overridden']])
+
+        self.frame_statusbar.SetStatusText(f"{len(self.events)} detections, {len(self.detections)} visible, {c} confirmed, {x} excluded, {o} overridden.")
+
+    def threshold_spn_Change(self, evt):
+        self.threshold = self.threshold_spn.GetValue()
+
+        self.build_detections_list()
+        self.dlc1.UpdateListContents(self.detections)
+
+        self.update_detection_status_label()
+
+    def datetime_pck_Change(self, evt):
+        start_date = self.start_dpck.GetValue().Format('%m/%d/%Y')
+        start_time = self.start_tpck.GetValue().Format('%H:%M:%S%z')
+        self.start_dt = dt.strptime(start_date + " " + start_time,'%m/%d/%Y %H:%M:%S%z')
+
+        stop_date = self.stop_dpck.GetValue().Format('%m/%d/%Y')
+        stop_time = self.stop_tpck.GetValue().Format('%H:%M:%S%z')
+        self.stop_dt = dt.strptime(stop_date + " " + stop_time,'%m/%d/%Y %H:%M:%S%z')
+
+        # sort the event list to ensure we have min/max datetimes
+        evts = sorted(self.events, key=lambda d: d['dt'])
+
+        # set bounds for the pickers to first and last events
+        evt_first_dt = evts[0]['dt'].replace(microsecond=0)
+        evt_last_dt = evts[-1]['dt'].replace(microsecond=0) + timedelta(seconds=1)
+
+        if self.start_dt < evt_first_dt:
+            self.start_dt = evt_first_dt
+            self.start_dpck.SetValue(evt_first_dt)
+            self.start_tpck.SetValue(evt_first_dt)
+
+        if self.stop_dt > evt_last_dt:
+            self.stop_dt = evt_last_dt
+            self.stop_dpck.SetValue(evt_last_dt)
+            self.stop_tpck.SetValue(evt_last_dt)
+
+        self.build_detections_list()
+        self.dlc1.UpdateListContents(self.detections)
+
+        self.update_detection_status_label()
+
+    def frame_Resize(self, event):
+        if self.image_1 is not None:
+            frame_size = self.window_1_pane_2.GetSize()
+            frame_w = int((frame_size[0]))
+            frame_h = int((frame_size[1]))
+            self.bitmap_1.SetBitmap(wx.Bitmap(self.image_1.Scale(frame_w, frame_h, wx.IMAGE_QUALITY_BICUBIC)))
+
+        if self.image_2 is not None:
+            frame_size = self.tspanel.GetSize()
+            frame_w = int((frame_size[0]))
+            frame_h = int((frame_size[1]))
+            self.bitmap_2.SetBitmap(wx.Bitmap(self.image_2.Scale(frame_w, frame_h, wx.IMAGE_QUALITY_BICUBIC)))
+
+    def alc1_selection_Change(self, e: wx.ListEvent):
+        # e will be None when we're calling the function directly, as opposed
+        # to it being triggered by an event
+        if e is not None:
+            cur = e.GetIndex()
+            index = self.audiofiles[cur][0]
+            twf = self.files[index]
+
+            self.pg1.SetPropertyValue('name', twf.metadata['Section']['name'])
+            self.pg1.SetPropertyValue('location', twf.metadata['Section']['location'])
+            self.pg1.SetPropertyValue('latitude', twf.metadata['Section']['latitude'])
+            self.pg1.SetPropertyValue('longitude', twf.metadata['Section']['longitude'])
+            self.pg1.SetPropertyValue('elevation', twf.metadata['Section']['elevation'])
+            self.pg1.SetPropertyValue('timezone', twf.metadata['Section']['timezone'])
+            self.pg1.SetPropertyValue('copyright', twf.metadata['Section']['copyright'])
+
+            self.pg1.SetPropertyValue('filename', twf.metadata['File Name'])
+            self.pg1.SetPropertyValue('filesize', twf.metadata['Reported Size'])
+            self.pg1.SetPropertyValue('modified', dt.fromisoformat(twf.metadata['Modified Time']).isoformat())
+            self.pg1.SetPropertyValue('duration', twf.metadata['Duration'])
+            self.pg1.SetPropertyValue('sample_rate', twf.metadata['fmt']['Frequency'])
+            self.pg1.SetPropertyValue('channels', twf.metadata['fmt']['Channels'])
+            self.pg1.SetPropertyValue('bit_depth', twf.metadata['fmt']['Bits/smp'])
+
+            self.pg1.SetPropertyValue('make', twf.metadata['Section']['make'])
+            self.pg1.SetPropertyValue('model', twf.metadata['Section']['model'])
+            self.pg1.SetPropertyValue('serial', twf.metadata['Section']['serial'])
+            self.pg1.SetPropertyValue('note', twf.metadata['Section']['note'])
+
+            nhlen = len([ d for d in self.events if d['engine'] == 'nh' and os.path.basename(d['filename']) == index])
+            bnlen = len([ d for d in self.events if d['engine'] == 'bn' and os.path.basename(d['filename']) == index])
+
+            self.pg1.SetPropertyValue('birdnet', bnlen)
+            self.pg1.SetPropertyValue('nighthawk', nhlen)
+        else:
+            self.pg1.SetPropertyValue('name', '')
+            self.pg1.SetPropertyValue('location', '')
+            self.pg1.SetPropertyValue('latitude', 0.0)
+            self.pg1.SetPropertyValue('longitude', 0.0)
+            self.pg1.SetPropertyValue('elevation', 0.0)
+            self.pg1.SetPropertyValue('timezone', '')
+            self.pg1.SetPropertyValue('copyright', '')
+
+            self.pg1.SetPropertyValue('filename', '')
+            self.pg1.SetPropertyValue('filesize', 0)
+            self.pg1.SetPropertyValue('modified', '')
+            self.pg1.SetPropertyValue('duration', 0.0)
+            self.pg1.SetPropertyValue('sample_rate', 0)
+            self.pg1.SetPropertyValue('channels', 0)
+            self.pg1.SetPropertyValue('bit_depth', 0)
+
+            self.pg1.SetPropertyValue('make', '')
+            self.pg1.SetPropertyValue('model', '')
+            self.pg1.SetPropertyValue('serial', '')
+            self.pg1.SetPropertyValue('note', '')
+
+            self.pg1.SetPropertyValue('birdnet', 0)
+            self.pg1.SetPropertyValue('nighthawk', 0)
+
+    def alc1_item_right_click(self, evt):
+        popupmenu = wx.Menu()
+
+        entries = [
+            [ 'Delete Selected Files', self.delete_files ]
+        ]
+
+        for entry in entries:
+            menuItem = popupmenu.Append(wx.ID_ANY, entry[0])
+            self.Bind(wx.EVT_MENU, entry[1], menuItem)
+
+        self.PopupMenu(popupmenu, evt.GetPoint())
+
+    def dlc1_selection_Change(self, e: wx.ListEvent):
+        index = e.GetIndex()
+
+        # TODO: This doesn't work when the current index has
+        # been hidden (e.g., excluded), so we need to test
+        # for that somehow or just accept a bit of flicker
+        # when we select an item that's already selected. If
+        # so, the remove self.dlc1_index altogether.
+        # if index != self.dlc1_index:
+        self.dlc1_index = index
+        self.spectrograph_Load(e.GetIndex())
+
+    def dlc1_item_Activate(self, event):
+        # don't bother trying to play audio if another thread is in use as it will
+        # render the audio with electronic noise when the thread switches.
+        if not self.play_worker and not self.clip_worker and not self.bn_worker:
+            if self.audioclip and os.path.exists(self.audioclip):
+                self.frame_statusbar.SetLabel(f"Playing {self.audioclip}")
+                self.play_worker = PlayAudioThread(self, self.audioclip)
+            else:
+                self.frame_statusbar.SetLabel(f"Audio clip not found.")
+        else:
+            dialog = wx.MessageDialog(
+                self,
+                "Unable to play audio while another background process is active.",
+                "Audio Playback Information",
+                wx.OK | wx.ICON_INFORMATION
+            )
+
+            dialog.ShowModal()
+            dialog.Destroy()
+
+    def dlc1_item_right_click(self, evt):
+        popupmenu = wx.Menu()
+
+        entries = [
+            [ 'Create Audio Clip and Spectrograph', self.extractwave_and_generatespec, None ],
+            [ 'Delete Audio Clip and Spectrograph', self.dlc1_remove_wave_and_spec, None ],
+            [ None, None, None ],
+            [ 'Confirmed Detections', self.toggle_confirmed_curations, self.show_confirmed_curations ],
+            [ 'E&xcluded Detections', self.toggle_excluded_curations, self.show_excluded_curations ],
+            [ '&Unconfirmed Detections', self.toggle_unconfirmed_curations, self.show_unconfirmed_curations ],
+            [ None, None, None ],
+            [ 'BirdNET Detections', self.toggle_birdnet_detections, self.show_birdnet_detections ],
+            [ 'Nighthawk Detections', self.toggle_nighthawk_detections, self.show_nighthawk_detections ],
+            [ None, None, None ],
+            [ 'Diurnal Detections', self.toggle_diurnal_detections, self.show_diurnal_detections ],
+            [ 'Nocturnal Detections', self.toggle_nocturnal_detections, self.show_nocturnal_detections ],
+            [ 'NFC Detections', self.toggle_nfc_detections, self.show_nfc_detections ]
+        ]
+
+        for entry in entries:
+            if entry[0] == None:
+                popupmenu.AppendSeparator()
+            else:
+                if entry[2] == None:
+                    menuItem = popupmenu.Append(wx.ID_ANY, entry[0])
+                else:
+                    self.item = wx.MenuItem(popupmenu, wx.ID_ANY, entry[0], kind = wx.ITEM_CHECK)
+                    menuItem = popupmenu.Append(self.item)
+                    self.item.Check(check = entry[2])
+
+                self.Bind(wx.EVT_MENU, entry[1], menuItem)
+
+        self.PopupMenu(popupmenu)
+
+    def dlc1_remove_wave_and_spec(self, evt=None):
+        firstitem = self.dlc1.GetFirstSelected()
+
+        if firstitem != -1:
+            index = firstitem
+
+            self.audioclip = None
+            self.specfile = None
+            self.image_1 = None
+            self.bitmap_1.SetBitmap(wx.Bitmap())
+            
+            while True:
+                event = self.detections[index]
+                event_dt = dt.strptime(f"{event[0]} {event[1]}", '%m/%d/%Y %H:%M:%S%z')
+                imgfile = f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[4]}-{event[7]}.png"
+                wavfile = f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[4]}-{event[7]}.WAV"
+
+                fullpathtoimg = os.path.join(self.cwd, 'clips', imgfile)
+                fullpathtowav = os.path.join(self.cwd, 'clips', wavfile)
+
+                if os.path.exists(fullpathtoimg):
+                    os.remove(fullpathtoimg)
+                
+                if os.path.exists(fullpathtowav):
+                    os.remove(fullpathtowav)
+
+                index = self.dlc1.GetNextSelected(index)
+                
+                if index == -1:
+                    break
+
+    def toggle_excluded_curations(self, evt):
+        if self.show_excluded_curations:
+            self.show_excluded_curations = False
+        else:
+            self.show_excluded_curations = True
+    
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def toggle_unconfirmed_curations(self, evt):
+        if self.show_unconfirmed_curations:
+            self.show_unconfirmed_curations = False
+        else:
+            self.show_unconfirmed_curations = True
+        
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def toggle_confirmed_curations(self, evt):
+        if self.show_confirmed_curations:
+            self.show_confirmed_curations = False
+        else:
+            self.show_confirmed_curations = True
+
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def toggle_birdnet_detections(self, evt):
+        if self.show_birdnet_detections:
+            self.show_birdnet_detections = False
+        else:
+            self.show_birdnet_detections = True
+    
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+    
+    def toggle_nighthawk_detections(self, evt):
+        if self.show_nighthawk_detections:
+            self.show_nighthawk_detections = False
+        else:
+            self.show_nighthawk_detections = True
+    
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def toggle_diurnal_detections(self, evt):
+        if self.show_diurnal_detections:
+            self.show_diurnal_detections = False
+        else:
+            self.show_diurnal_detections = True
+    
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def toggle_nocturnal_detections(self, evt):
+        if self.show_nocturnal_detections:
+            self.show_nocturnal_detections = False
+        else:
+            self.show_nocturnal_detections = True
+    
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def toggle_nfc_detections(self, evt):
+        if self.show_nfc_detections:
+            self.show_nfc_detections = False
+        else:
+            self.show_nfc_detections = True
+    
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def spectrograph_Load(self, index):
+        # don't load images on multiselect
+        if self.dlc1.SelectedItemCount == 1:
+            event = self.detections[index]
+            event_dt = dt.strptime(f"{event[0]} {event[1]}", '%m/%d/%Y %H:%M:%S%z')
+
+            specfile = os.path.join(self.cwd, 'clips', f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[11]}-{event[7]}.PNG")
+            clipfile = os.path.join(self.cwd, 'clips', f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[11]}-{event[7]}.WAV")
+
+            if os.path.exists(specfile):
+                self.specfile = specfile
+                self.audioclip = clipfile
+
+                frame_size = self.window_1_pane_2.GetSize()
+                frame_w = int((frame_size[0]))
+                frame_h = int((frame_size[1]))
+                self.image_1 = wx.Image(self.specfile, wx.BITMAP_TYPE_ANY)
+                img1 = self.image_1.Scale(frame_w, frame_h, wx.IMAGE_QUALITY_BICUBIC)
+                self.bitmap_1.SetBitmap(wx.Bitmap(img1))
+            else:
+                self.image_1 = None
+                self.bitmap_1.SetBitmap(wx.Bitmap())
+                self.specfile = None
+                self.audioclip = None
+
+    def bitmap_1_right_click(self, evt):
+        popupmenu = wx.Menu()
+
+        entries = [
+            [ 'Save As...', self.bitmap_1_save_as ]
+        ]
+
+        for entry in entries:
+            menuItem = popupmenu.Append(wx.ID_ANY, entry[0])
+            self.Bind(wx.EVT_MENU, entry[1], menuItem)
+
+        self.PopupMenu(popupmenu)
+
+    def bitmap_1_save_as(self, evt):
+        curpath, filename = os.path.split(self.specfile)
+
+        dlg = wx.FileDialog(self, "Save Specgtrograph as...", wx.GetHomeDir(), filename, "PNG file(*.png)|*.*", wx.FD_SAVE)
+
+        if dlg.ShowModal() == wx.ID_OK:
+            print(f"Copying {self.specfile} to {dlg.GetPath()}")
+            shutil.copy(self.specfile, dlg.GetPath())
+
+        dlg.Destroy()
+
+    def bitmap_2_right_click(self, evt):
+        popupmenu = wx.Menu()
+
+        entries = [
+            [ 'Save As...', self.bitmap_2_save_as ]
+        ]
+
+        for entry in entries:
+            menuItem = popupmenu.Append(wx.ID_ANY, entry[0])
+            self.Bind(wx.EVT_MENU, entry[1], menuItem)
+
+        self.PopupMenu(popupmenu)
+
+    def bitmap_2_save_as(self, evt):
+        filename = os.path.join(self.cwd, "timeseries.png")
+
+        dlg = wx.FileDialog(self, "Save timeseries graph as...", wx.GetHomeDir(), "timeseries.png", "PNG file(*.png)|*.*", wx.FD_SAVE)
+
+        if dlg.ShowModal() == wx.ID_OK:
+            print(f"Copying {filename} to {dlg.GetPath()}")
+            shutil.copy(filename, dlg.GetPath())
+
+        dlg.Destroy()
+
+    def play_audio_thread_Result(self, event):
+        self.frame_statusbar.SetLabel(f"{len(self.detections)} detections")
+        # In either event, the worker is done
+        self.play_worker = None
+
+    def extractwave_and_generatespec(self, evt):
+        firstitem = self.dlc1.GetFirstSelected()
+        curcount = 0
+
+        evtlist = []
+
+        if firstitem != -1:
+            index = firstitem
+
+            while True:
+                curcount += 1
+
+                for det in self.events:
+                    if det['uid'] == self.detections[index][9]:
+                        evtlist.append(det)
+
+                index = self.dlc1.GetNextSelected(index)
+                
+                if index == -1:
+                    break
+
+            if not self.clip_worker:
+                self.clip_worker = GenSpectrographThread(self, self.files, evtlist, os.path.join(self.cwd, 'clips'))
+
+        self.spectrograph_Load(firstitem)
+
+    def generate_spectrograph_thread_Result(self, event):
+        self.frame_statusbar.SetLabel("")
+        
+        if event.data != None:
+            # Thread aborted (using our convention of None return)
+            self.frame_statusbar.SetLabel(f"Processing spectrograph {event.data[0]} of {event.data[1]}.")
+        else:
+            self.frame_statusbar.SetLabel('Spectrograph generation complete.')
+            self.spectrograph_Load(self.dlc1.GetFirstSelected())
+
+            # mark worker as available again    
+            self.clip_worker = None
+
+    # TODO: run in a thread as it can take 5-10s to retrieve data sometimes
+    def get_weather(self, event):
+        section = self.config['general']['default']
+
+        if section in self.config and 'weather_station' in self.config[section]:
+            stationid = self.config[section]['weather_station']
+
+            tw = talonlib.TalonWeather(
+                self.config[section]['latitude'],
+                self.config[section]['longitude'],
+                self.config[section]['timezone'],
+                debug=False,
+                stationid=stationid,
+                uscs=True,
+                cachedir=self.config['general']['cachedir']
+            )
+
+            forecast = tw.forecast_table(24)
+            observations = tw.observation_table(24)
+
+            max = 0
+
+            for line in forecast.split('\n'):
+                if len(line) > max:
+                    max = len(line)
+
+            self.weather_txtctrl.Clear()
+
+            self.weather_txtctrl.AppendText("Future Forecast\n")
+            self.weather_txtctrl.AppendText('-' * max + '\n')
+            self.weather_txtctrl.AppendText(forecast)
+
+            max = 0
+
+            for line in observations.split('\n'):
+                if len(line) > max:
+                    max = len(line)
+
+            self.weather_txtctrl.AppendText('\n\n')
+
+            self.weather_txtctrl.AppendText("Recent Observations\n")
+            self.weather_txtctrl.AppendText('-' * max + '\n')
+            self.weather_txtctrl.AppendText(observations)
+
+            self.weather_txtctrl.ShowPosition(0)
+
+    def generate_checklists(self, event):
+        # TODO: Warning, there's the risk of getting the dates/times wrong
+        # as we're blindly casting the datetimes of the events as the time
+        # zone supplied in the section. For now it's up to the user to not
+        # mix up events from different locations.
+
+        if self.files:
+            # start at midnight of the date of the first event, just so we
+            # are sure our checklist windows are full hours
+            curtz = ZoneInfo(self.timezone)
+            # evts = sorted(self.events, key=lambda d: d['dt'])
+            evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
+
+            start_date = dt.combine(evts[0]['dt'].date(), dtt(0,0,0)).replace(microsecond=0)
+
+            ts = talonlib.TalonSchedule(
+                self.latitude,
+                self.longitude,
+                self.timezone,
+                self.section,
+                start_date
+            )
+
+            checklists = []
+
+            
+            for window in ts:
+                if window['start'] > evts[-1]['dt'].astimezone(curtz):
+                    break
+                else:
+                    curcheck = {}
+
+                    curcheck['start'] = window['start'].replace(microsecond=0)
+                    curcheck['stop'] = window['stop'].replace(microsecond=0)
+                    curcheck['protocol'] = window['protocol']
+                    curcheck['species'] = {}
+
+                    for evt in evts:
+                        if window['start'] <= evt['dt'].astimezone(curtz) < window['stop']:
+                            if evt['disposition'] == 'confirmed':
+                                name = f"{evt['common_name']} ({evt['species_code']})"
+
+                                if name in curcheck['species']:
+                                    curcheck['species'][name] += 1
+                                else:
+                                    curcheck['species'][name] = 1
+                    
+                    checklists.append(curcheck)
+
+            output = ''
+            max = 0
+            i = 0
+
+            for ckl in checklists:
+                if len(ckl['species']) > 0:
+                    max += 1
+
+            for ckl in checklists:
+                if len(ckl['species']) > 0:
+                    i += 1
+                    total_individuals = 0
+
+                    duration = ckl['stop'] - ckl['start']
+
+                    for species in ckl['species']:
+                        total_individuals += ckl['species'][species]
+
+                    output += '*' * 42 + '\n'
+                    output += f"* Checklist: {i} of {max}\n"
+                    output += '*' * 42 + '\n'
+                    output += f"Start Time     : {ckl['start']}\n"
+                    output += f"Stop Time      : {ckl['stop']}\n"
+                    output += f"Duration       : {duration}\n"
+                    output += f"Location       : {self.description}\n"
+                    output += f"eBird Protocol : {ckl['protocol']}\n"
+                    # output += f"Total Species  : {len(ckl['species'])}\n"
+                    output += f"Total Calls    : {total_individuals}\n"
+                    output += '-' * 42 + '\n'
+
+                    # sort species in alphabetical order
+                    spc = sorted(ckl['species'], key=lambda d: d)
+
+                    for species in spc:
+                        output += f"{ckl['species'][species]:>2} - {species}\n"
+
+                    output += '\n\n'
+            
+            self.chklst_txtctrl.Clear()
+            self.chklst_txtctrl.AppendText(output)
+            self.chklst_txtctrl.ShowPosition(0)
+
+    # TODO: run in a thread because even though it's fast, it's not instant
+    def generate_timeseries_graph(self, event=None, frequency=10, title="", y_axis_max=10):
+        if len(self.events) > 0:
+            evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
+        
+            self.frame_statusbar.SetStatusText(f"Generating time series graph for {len(evts)} results.")
+            curpath = os.path.join(self.cwd, "timeseries.png")
+
+            td = talonlib.Talon()
+            td.generate_timeseries_graph(evts, curpath)
+
+            if os.path.exists(curpath):
+                frame_size = self.tspanel.GetSize()
+                frame_w = int((frame_size[0]))
+                frame_h = int((frame_size[1]))
+                self.image_2 = wx.Image(curpath, wx.BITMAP_TYPE_ANY)
+                self.bitmap_2 = wx.StaticBitmap(self.tspanel, wx.ID_ANY, wx.Bitmap(self.image_2), wx.DefaultPosition, wx.DefaultSize, 0)
+                self.bitmap_2.SetBitmap(wx.Bitmap(self.image_2.Scale(frame_w, frame_h, wx.IMAGE_QUALITY_BICUBIC)))
+            else:
+                self.image_2 = None
+                self.bitmap_2.SetBitmap(wx.Bitmap())
+            
+            self.frame_statusbar.SetStatusText(f"Done.")
+
+    def accelerator_Save(self, event):
+        curations = [d for d in self.events if d.get('curated') == True]
+        wavelist = []
+
+        # build a list of wav files that have associated curations
+        for det in curations:
+            if det['curated'] and det['filename'] not in wavelist:
+                wavelist.append(det['filename'])
+    
+        self.frame_statusbar.SetLabel(f"Saving {len(curations)} curations out of {len(self.events)} events, in {len(wavelist)} file(s).")
+
+        header = [
+            'filename',
+            'orig_start',
+            'orig_stop',
+            'orig_engine',
+            'orig_species',
+            'orig_common_name',
+            'orig_probability',
+            'start',
+            'stop',
+            'engine',
+            'species_code',
+            'common_name',
+            'probability',
+            'disposition',
+            'overridden'
+            ]
+
+        for wavefile in wavelist:
+            curpath, origwavefile = os.path.split(wavefile)
+            filename, extension = os.path.splitext(origwavefile)
+            ta_file = filename + '_talon.csv'
+            ta_file = os.path.join(self.cwd, ta_file)
+
+            rows = []
+
+            for det in curations:
+                curpath, curwavefile = os.path.split(det['filename'])
+
+                # only consider wavefiles with curations, but not curations that are flagged as restore
+                if curwavefile == origwavefile:
+                    # if a curated disposition is unconfirmed and it's not overridden, then
+                    # it's being restored, in which case we want to leave it out
+                    # of the CSV file when we rebuild it.
+                    if not (det['disposition'] == 'unconfirmed' and not det['overridden']):
+                        rows.append(
+                            [
+                                os.path.basename(det['filename']),
+                                det['orig_start'],
+                                det['orig_stop'],
+                                det['orig_engine'],
+                                det['orig_species'],
+                                det['orig_common_name'],
+                                det['orig_probability'],
+                                det['start'],
+                                det['stop'],
+                                det['engine'],
+                                det['species_code'],
+                                det['common_name'],
+                                det['probability'],
+                                det['disposition'],
+                                det['overridden']
+                            ]
+                        )
+
+            # if we have rows, write them, otherwise remove the file
+            if len(rows) > 0:
+                with open(ta_file, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(header)
+                    writer.writerows(rows)
+            else:
+                if os.path.exists(ta_file):
+                    os.remove(ta_file)
+
+        # TODO:
+        # for det in detections
+        #   if det is overridden
+        #     remove the old specfile and clipfile
+
+        self.frame_statusbar.SetLabel(f"Done.")
+
+        self.dirtycache = False
+
+    def accelerator_SelectAll(self, event):
+        cur = wx.Window.FindFocus()
+
+        if cur:
+            if cur.GetName() == 'listCtrl':
+                for i in range(cur.GetItemCount()):
+                    cur.Select(i)
+        else:
+            print("No control is focused.")
+
+    def delete_files(self, evt):
+        delete_list = []
+        index = self.alc1.GetFirstSelected()
+
+        if index != -1:
+            dialog = wx.MessageDialog(
+                self,
+                "Are you sure you want to continue, this operation can't be undone?",
+                "Delete Files",
+                wx.YES_NO | wx.ICON_WARNING,
+            )
+
+            result = dialog.ShowModal()
+            dialog.Destroy()
+            
+            if result:
+                if self.dirtycache:
+                    dialog = wx.MessageDialog(
+                        self,
+                        "Are you sure you want to continue, any unsaved curations will be lost?",
+                        "Delete Files",
+                        wx.YES_NO | wx.ICON_WARNING,
+                    )
+
+                    result = dialog.ShowModal()
+                    dialog.Destroy()
+
+                if result:
+                    while True:
+                        curwav = os.path.join(self.cwd, self.alc1.GetItem(index, col=0).Text)
+                        filename, extension = os.path.splitext(curwav)
+
+                        delete_list.append(curwav)
+                        delete_list.append(str(filename + '_detections.csv'))
+                        delete_list.append(str(filename + '_birdnet.csv'))
+                        delete_list.append(str(filename + '_audacity.txt'))
+                        delete_list.append(str(filename + '_talon.txt'))
+
+                        index = self.alc1.GetNextSelected(index)
+
+                        if index == -1:
+                            break
+
+                    for item in delete_list:
+                        if os.path.exists(item):
+                            os.remove(item)
+
+                    # the state of contents changed, so we need to do a complete reload
+                    self.initialize()
+
+    def on_close(self, event):
+        result = wx.ID_YES
+        
+        if self.dirtycache:
+            dialog = wx.MessageDialog(
+                self,
+                "Are you sure you want to exit, you still have unsaved curations?",
+                "Confirm Exit",
+                wx.YES_NO | wx.ICON_QUESTION,
+            )
+
+            result = dialog.ShowModal()
+            dialog.Destroy()
+
+        if result == wx.ID_YES:
+            self.Destroy()
+        else:
+            event.Skip()
+
+    def OnAbout(self, event):
+        # Create the AboutDialogInfo object
+        info = wx.adv.AboutDialogInfo()
+        info.SetName("Talon")
+        info.SetVersion("0.0.1")
+        info.SetDescription("A toolkit for curating Nocturnal Flight Calls (NFCs) as detected by both Nighthawk and BirdNet.")
+        info.SetCopyright("Copyright (C) 2025")
+        info.SetWebSite("https://github.com/tazerdev/talon", "Visit my Github page.")
+        info.AddDeveloper("Mark Montazer")
+
+        # Show the dialog
+        wx.adv.AboutBox(info)
+
+class DeleteFileDialog(wx.Dialog):
+    def __init__(self, *args, **kwds):
+        kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_DIALOG_STYLE
+        wx.Dialog.__init__(self, *args, **kwds)
+        self.SetTitle("dialog")
+
+        sizer_1 = wx.BoxSizer(wx.VERTICAL)
+
+        label_1 = wx.StaticText(self, wx.ID_ANY, "Are you sure you want to delete the selected files? This operation can't be undone.", style=wx.ALIGN_CENTER_HORIZONTAL)
+        sizer_1.Add(label_1, 0, wx.EXPAND, 0)
+
+        sizer_2 = wx.StdDialogButtonSizer()
+        sizer_1.Add(sizer_2, 0, wx.ALIGN_RIGHT | wx.ALL, 4)
+
+        self.button_OK = wx.Button(self, wx.ID_OK, "")
+        self.button_OK.SetDefault()
+        sizer_2.AddButton(self.button_OK)
+
+        self.button_CANCEL = wx.Button(self, wx.ID_CANCEL, "")
+        sizer_2.AddButton(self.button_CANCEL)
+
+        sizer_2.Realize()
+
+        self.SetSizer(sizer_1)
+        sizer_1.Fit(self)
+
+        self.SetAffirmativeId(self.button_OK.GetId())
+        self.SetEscapeId(self.button_CANCEL.GetId())
+
+        self.Layout()
+
+class duplicate_dialog(wx.Dialog):
+    def __init__(self, *args, **kwds):
+        kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER | wx.STAY_ON_TOP
+        wx.Dialog.__init__(self, *args, **kwds)
+        self.SetTitle("Duplicate Detection")
+
+        sizer_1 = wx.BoxSizer(wx.VERTICAL)
+
+        sizer_3 = wx.BoxSizer(wx.VERTICAL)
+        sizer_1.Add(sizer_3, 1, wx.ALL | wx.EXPAND, 10)
+
+        label_1 = wx.StaticText(self, wx.ID_ANY, "Enter eBird Common Name or Nighthawk Group Code:")
+        sizer_3.Add(label_1, 0, wx.ALL, 3)
+
+        self.text_ctrl_1 = wx.TextCtrl(self, wx.ID_ANY, "")
+        sizer_3.Add(self.text_ctrl_1, 0, wx.EXPAND, 0)
+
+        sizer_4 = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_3.Add(sizer_4, 1, wx.ALL | wx.EXPAND, 0)
+
+        label_2 = wx.StaticText(self, wx.ID_ANY, "Start:")
+        sizer_4.Add(label_2, 0, 0, 0)
+
+        self.spin_ctrl_double_1 = wx.SpinCtrlDouble(self, wx.ID_ANY, initial=0.0, min=0.0, max=86400.0)
+        self.spin_ctrl_double_1.SetIncrement(0.1)
+        self.spin_ctrl_double_1.SetDigits(2)
+        sizer_4.Add(self.spin_ctrl_double_1, 0, 0, 0)
+
+        label_3 = wx.StaticText(self, wx.ID_ANY, "Stop:")
+        sizer_4.Add(label_3, 0, 0, 0)
+
+        self.spin_ctrl_double_2 = wx.SpinCtrlDouble(self, wx.ID_ANY, initial=0.0, min=0.0, max=86400.0)
+        self.spin_ctrl_double_2.SetIncrement(0.1)
+        self.spin_ctrl_double_2.SetDigits(2)
+        sizer_4.Add(self.spin_ctrl_double_2, 0, wx.ALL, 0)
+
+        sizer_2 = wx.StdDialogButtonSizer()
+        sizer_1.Add(sizer_2, 0, wx.ALIGN_RIGHT | wx.ALL, 10)
+
+        self.button_OK = wx.Button(self, wx.ID_OK, "")
+        self.button_OK.SetDefault()
+        sizer_2.AddButton(self.button_OK)
+
+        self.button_CANCEL = wx.Button(self, wx.ID_CANCEL, "")
+        sizer_2.AddButton(self.button_CANCEL)
+
+        sizer_2.Realize()
+
+        self.SetSizer(sizer_1)
+        sizer_1.Fit(self)
+
+        self.SetAffirmativeId(self.button_OK.GetId())
+        self.SetEscapeId(self.button_CANCEL.GetId())
+
+        self.Layout()
+        self.Centre()
+
+    def populate(self, det):
+        self.text_ctrl_1.Value = det['common_name']
+        self.spin_ctrl_double_1.Value = det['start']
+        self.spin_ctrl_double_2.Value = det['stop']
+
+    def set_taxonomy(self, taxonomy):
+        print(len(taxonomy))
+        self.text_ctrl_1.AutoComplete(taxonomy)
+
+class override_dialog(wx.Dialog):
+    def __init__(self, *args, **kwds):
+        kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER | wx.STAY_ON_TOP
+        wx.Dialog.__init__(self, *args, **kwds)
+        self.SetTitle("Override Detection")
+
+        sizer_1 = wx.BoxSizer(wx.VERTICAL)
+
+        sizer_3 = wx.BoxSizer(wx.VERTICAL)
+        sizer_1.Add(sizer_3, 1, wx.ALL | wx.EXPAND, 10)
+
+        label_1 = wx.StaticText(self, wx.ID_ANY, "Search for an eBird Common Name:")
+        sizer_3.Add(label_1, 0, wx.ALL, 3)
+
+        self.text_ctrl_1 = wx.TextCtrl(self, wx.ID_ANY, "")
+        sizer_3.Add(self.text_ctrl_1, 0, wx.EXPAND, 0)
+
+        sizer_4 = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_3.Add(sizer_4, 1, wx.ALL | wx.EXPAND, 0)
+
+        label_2 = wx.StaticText(self, wx.ID_ANY, "Start:")
+        sizer_4.Add(label_2, 0, 0, 0)
+
+        self.spin_ctrl_double_1 = wx.SpinCtrlDouble(self, wx.ID_ANY, initial=0.0, min=0.0, max=86400.0)
+        self.spin_ctrl_double_1.SetIncrement(0.1)
+        self.spin_ctrl_double_1.SetDigits(2)
+        sizer_4.Add(self.spin_ctrl_double_1, 0, 0, 0)
+
+        label_3 = wx.StaticText(self, wx.ID_ANY, "Stop:")
+        sizer_4.Add(label_3, 0, 0, 0)
+
+        self.spin_ctrl_double_2 = wx.SpinCtrlDouble(self, wx.ID_ANY, initial=0.0, min=0.0, max=86400.0)
+        self.spin_ctrl_double_2.SetIncrement(0.1)
+        self.spin_ctrl_double_2.SetDigits(2)
+        sizer_4.Add(self.spin_ctrl_double_2, 0, wx.ALL, 0)
+
+        sizer_2 = wx.StdDialogButtonSizer()
+        sizer_1.Add(sizer_2, 0, wx.ALIGN_RIGHT | wx.ALL, 10)
+
+        self.button_OK = wx.Button(self, wx.ID_OK, "")
+        self.button_OK.SetDefault()
+        sizer_2.AddButton(self.button_OK)
+
+        self.button_CANCEL = wx.Button(self, wx.ID_CANCEL, "")
+        sizer_2.AddButton(self.button_CANCEL)
+
+        sizer_2.Realize()
+
+        self.SetSizer(sizer_1)
+        sizer_1.Fit(self)
+
+        self.SetAffirmativeId(self.button_OK.GetId())
+        self.SetEscapeId(self.button_CANCEL.GetId())
+
+        self.Layout()
+        self.Centre()
+
+    def populate(self, det):
+        self.text_ctrl_1.Value = det['common_name']
+        self.spin_ctrl_double_1.Value = det['start']
+        self.spin_ctrl_double_2.Value = det['stop']
+
+    def set_taxonomy(self, taxonomy):
+        self.text_ctrl_1.AutoComplete(taxonomy)
+
+class ffmpeg_dialog(wx.Dialog):
+    def __init__(self, *args, **kwds):
+        kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_DIALOG_STYLE
+        wx.Dialog.__init__(self, *args, **kwds)
+        self.SetTitle("FFMpeg Dialog")
+
+        self.notebook_1 = wx.Notebook(self, wx.ID_ANY)
+
+        self.notebook_1_pane_1 = wx.Panel(self.notebook_1, wx.ID_ANY)
+        self.notebook_1.AddPage(self.notebook_1_pane_1, "Band Rejection Filter")
+
+        sizer_1 = wx.BoxSizer(wx.VERTICAL)
+
+        grid_sizer_1 = wx.FlexGridSizer(6, 4, 5, 5)
+        sizer_1.Add(grid_sizer_1, 1, wx.ALL | wx.EXPAND | wx.FIXED_MINSIZE, 5)
+
+        grid_sizer_1.Add((0, 0), 0, 0, 0)
+
+        label_6 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "Low")
+        grid_sizer_1.Add(label_6, 0, wx.ALIGN_CENTER, 0)
+
+        label_7 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "Center")
+        grid_sizer_1.Add(label_7, 0, wx.ALIGN_CENTER, 0)
+
+        label_8 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "High")
+        grid_sizer_1.Add(label_8, 0, wx.ALIGN_CENTER, 0)
+
+        label_1 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "Frequency 1:")
+        grid_sizer_1.Add(label_1, 0, wx.ALIGN_CENTER_HORIZONTAL, 0)
+
+        self.text_ctrl_5 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_5, 0, 0, 0)
+
+        self.text_ctrl_10 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_10, 0, 0, 0)
+
+        self.text_ctrl_11 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_11, 0, 0, 0)
+
+        label_2 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "Frequency 2:")
+        grid_sizer_1.Add(label_2, 0, 0, 0)
+
+        self.text_ctrl_6 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_6, 0, 0, 0)
+
+        self.text_ctrl_12 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_12, 0, 0, 0)
+
+        self.text_ctrl_13 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_13, 0, 0, 0)
+
+        label_3 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "Frequency 3:")
+        grid_sizer_1.Add(label_3, 0, 0, 0)
+
+        self.text_ctrl_7 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_7, 0, 0, 0)
+
+        self.text_ctrl_14 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_14, 0, 0, 0)
+
+        self.text_ctrl_15 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_15, 0, 0, 0)
+
+        label_4 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "Frequency 4:")
+        grid_sizer_1.Add(label_4, 0, 0, 0)
+
+        self.text_ctrl_8 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_8, 0, 0, 0)
+
+        self.text_ctrl_16 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_16, 0, 0, 0)
+
+        self.text_ctrl_17 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_17, 0, 0, 0)
+
+        label_5 = wx.StaticText(self.notebook_1_pane_1, wx.ID_ANY, "Frequency 5:")
+        grid_sizer_1.Add(label_5, 0, 0, 0)
+
+        self.text_ctrl_9 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_9, 0, 0, 0)
+
+        self.text_ctrl_18 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_18, 0, 0, 0)
+
+        self.text_ctrl_19 = wx.TextCtrl(self.notebook_1_pane_1, wx.ID_ANY, "")
+        grid_sizer_1.Add(self.text_ctrl_19, 0, 0, 0)
+
+        sizer_2 = wx.StdDialogButtonSizer()
+        sizer_1.Add(sizer_2, 0, wx.ALIGN_RIGHT | wx.ALL, 4)
+
+        self.button_OK = wx.Button(self.notebook_1_pane_1, wx.ID_OK, "")
+        self.button_OK.SetDefault()
+        sizer_2.AddButton(self.button_OK)
+
+        self.button_CANCEL = wx.Button(self.notebook_1_pane_1, wx.ID_CANCEL, "")
+        sizer_2.AddButton(self.button_CANCEL)
+
+        self.notebook_1_HighPassFilter = wx.Panel(self.notebook_1, wx.ID_ANY)
+        self.notebook_1.AddPage(self.notebook_1_HighPassFilter, "High Pass Filter")
+
+        self.notebook_1_AudioNormalize = wx.Panel(self.notebook_1, wx.ID_ANY)
+        self.notebook_1.AddPage(self.notebook_1_AudioNormalize, "Audio Normalize")
+
+        sizer_2.Realize()
+
+        self.notebook_1_pane_1.SetSizer(sizer_1)
+
+        self.SetAffirmativeId(self.button_OK.GetId())
+        self.SetEscapeId(self.button_CANCEL.GetId())
+
+        self.Layout()
+
+def ParseCommandLineArguments():
+    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="tlist - a utility for listing details of WAV files.")
+    arg_parser.add_argument('-p', '--path', default=".", type=str, help="Directory or file to parse.")
+    arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Config file to attempt to read.")
+
+    return arg_parser
+
+if __name__ == "__main__":
+    arg_parser = ParseCommandLineArguments()
+    args = arg_parser.parse_args()
+
+    tc = talonlib.TalonConfig(args.config)
+    config = tc.config
+
+    if 'general' in config and 'icon_path' in config['general']:
+        if os.path.exists(config['general']['icon_path']):
+            icon_path = config['general']['icon_path']
+
+    app = wx.App(False)
+    frame = MyFrame(None, "", args.config, icon_path)
+    frame.SetTitle(f"Talon - {os.getcwd()}")
+    frame.SetIcon(wx.Icon(os.path.join(icon_path, "app.ico"), wx.BITMAP_TYPE_ANY))
+
+    app.MainLoop()
