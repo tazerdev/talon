@@ -1,478 +1,174 @@
-#!/opt/talon-venv/bin/python3
+#!/usr/bin/env python3
 
 import os
 import csv
 import sys
-import math
-import pytz
-import wave
-import guano
-import signal
+import json
+import time
+import concurrent.futures
+from multiprocessing import Pool
+from itertools import product
+
+from signal import signal, SIGINT, SIG_IGN
 import argparse
-import datetime
-import configparser
-from astral.sun import sun
-from astral import LocationInfo
-from collections import Counter
-from collections import OrderedDict
-
+import talonlib
 from pathlib import Path
-from datetime import timedelta
+import datetime
 from datetime import datetime as dt
-
-DEBUG=False
-GROUPCODES = """Group Codes used by Nighthawk
-
-New World Warblers (Parulidae)
-BZWA
-    * Chestnut-sided Warbler   * Common Yellowthroat    * Hooded Warbler
-    * Kirtland's Warbler
-DEWA
-    * Yellow-throated Warbler  * Northern Parula        * Pine Warbler
-DBUP
-    * Orange-crowned Warbler   * Nashville Warbler      * Tennessee Warbler
-    * Golden-cheeked Warbler   * Hermit Warbler         * Townsend's Warbler
-    * Lucy's Warbler           * Virginia's Warbler     * Colima Warbler
-    * Grace's Warbler          * Black-throated Gray Warbler
-    * Black-throated Green Warbler
-MWAR
-    * MacGillivray's Warbler   * Mourning Warbler
-SBUF
-    * Golden-winged Warbler    * Blue-winged Warbler    * Yellow-rumped Warbler
-    * Ovenbird                 * Prothonotary Warbler   * Palm Warbler
-    * Swainson's Warbler       * Black-throated Blue Warbler
-ZEEP
-    * Bay-breasted Warbler     * Blackburnian Warbler   * Blackpoll Warbler
-    * Cape May Warbler         * Cerulean Warbler       * Connecticut Warbler
-    * Kentucky Warbler         * Lousiana Waterthrush   * Magnolia Warbler
-    * Northern Waterthrush     * Worm-eating Warbler    * Yellow Warbler
-    * Red-faced Warbler
-
-New World Sparrows (Passerellidae):
-CCBRS
-    * Clay-colored Sparrow     * Brewer's Sparrow
-CUPS
-    * American Tree Sparrow    * Chipping Sparrow
-DESP
-    * Field Sparrow            * Henslow's Sparrow      * LeConte's Sparrow
-    * Nelson's Sparrow         * Savannah Sparrow       * Saltmarsh Sparrow
-    * Bachman's Sparrow
-HSSP
-    * Grasshopper Sparrow      * White-crowned Sparrow  * Vesper Sparrow
-SFHS
-    * Fox Sparrow              * Harris Sparrow         * Song Sparrow
-    * White-throated Sparrow   * Golden-crowned Sparrow * Seaside Sparrow
-SWLI
-    * Lincoln's Sparrow        * Swamp Sparrow
-
-Thrushes and Related (Turdidae):
-BLUEB
-    * Eastern Bluebird         * Western Bluebird       * Mountain Bluebird
-GCBI
-    * Gray-cheeked Thrush      * Bicknell's Thrush
-THSH
-    * Hermit Thrush            * Swainson's Thrush      * Veery
-    * Wood Thrush
-WITH
-    * Dusky Thrush             * Naumann's Thrush       * Red-throated Thrush
-    * Black-throated Thrush
-
-Buntings, Grosbeaks and Tanagers (Cardinalidae)
-BUNT
-    * Blue Grosbeak            * Indigo Bunging         * Varied Bunting
-    * Lazuli Bunting           * Varied Bunting
-GROS
-    * Rose-breasted Grosbeak   * Black-headed Grosbeak
-TANA
-    * Scarlet Tanager          * Summer Tanager         * Western Tanager"""
-
-def validate_duration(value):
-    val = int(value)
-
-    if val <= 0:
-        raise argparse.ArgumentTypeError("Duration must be greater than 0.")
-
-    return val
-
-def validate_longitude(value):
-    val = float(value)
-
-    if val < -180 or val > 180:
-        raise argparse.ArgumentTypeError("Longitude must be between 180 and -180.")
-
-    return val
-
-def validate_latitude(value):
-    val = float(value)
-
-    if val < -90 or val > 90:
-        raise argparse.ArgumentTypeError("Latitude must be between 90 and -90.")
-
-    return val
-
-def validate_timezone(value):
-    if value not in pytz.all_timezones:
-        raise argparse.ArgumentTypeError("Specified time zone not found in time zone database.")
-
-    return value
-
-def validate_datetime(s):
-    try:
-        return dt.strptime(s, '%Y%m%d %H:%M:%S')
-    except ValueError:
-        msg = "Not a valid date: '{0}'.".format(s)
-        raise argparse.ArgumentTypeError(msg)
-
-def validate_intorstr(text):
-    """Helper function for argument parsing."""
-    try:
-        return int(text)
-    except ValueError:
-        return text
+from datetime import timedelta
+from datetime import time as dtt
+from zoneinfo import ZoneInfo
 
 def signal_handler(signum, frame):
-    if DEBUG:
-        print("CTRL-C detected, exiting.")
+    print("CTRL-C detected, exiting.")
 
-    signal.signal(signum, signal.SIG_IGN)
+    signal(signum, SIG_IGN)
     sys.exit(0)
 
-def get_metadata(wavfile: str, timezone: str):
-    """
-    Retrieves metadata from the supplied file.
+def json_dt_serialize(obj):
+    if isinstance(obj, (dt, datetime.date)):
+        return obj.isoformat()
 
-    Args:
-        wavefile (str): The full path to the WAV file.
-        timezone (str): The timezone of the date/time associated with the WAV file.
-    
-    Returns:
-        dict: A dictionary containing the metadata.
-    """
-    metadata = {}
-    curtz = pytz.timezone(timezone)
-    
-    curpath, filename = os.path.split(wavfile)
-    filename, extension = os.path.splitext(filename)
+    raise TypeError(f"Type {type(obj)} not serializable")
 
+def ParseCommandLineArguments():
+    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="tlist - A utility for listing details of WAV files.")
+    arg_parser.add_argument('-p', '--path', default=".", type=str, help="Directory to parse.")
+    arg_parser.add_argument('file', nargs='?', help="File to parse, if no file is specified then all files in the current directory will be considered.")
+    arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Path to a Talon config file to attempt to read.")
+    arg_parser.add_argument('-j', '--json', action='store_true', help='Output results in JSON format.')
+    arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
+    arg_parser.add_argument('-r', '--recurse', action='store_true', help='List files recursively.')
+    arg_parser.add_argument('-s', '--species', default="all", nargs='?', help="Common name of a bird (e.g., woothr, Barn Owl, etc) you wish to work with.")
+    arg_parser.add_argument('-e', '--engine', default='all', nargs='+', choices=['all', 'bn', 'nh', 'ta'], help="The analysis engine whose results you wish to return.")
+    arg_parser.add_argument('-o', '--protocol', default='all', nargs='+', choices=['all', 'nfc', 'noc', 'day',], help="The eBird protocol whose results you wish to return.")
+    # arg_parser.add_argument('--disposition', default='all', nargs='+', choices=['all', 'confirmed', 'excluded', 'unconfirmed',], help="The eBird protocol whose results you wish to return.")
+
+    arg_parser.add_argument('-t', '--threshold', default=0.25, type=float, help="Only generate output for events above this confidence threshold.")
+    arg_parser.add_argument('--station', default='all', type=str, help="The talon audio station.")
+
+    arg_parser.add_argument('--start', type=dt.fromisoformat, help="A datetime in ISO format.", default=None)
+    arg_parser.add_argument('--duration', default=None, type=float, help="A duration in hours.")
+    arg_parser.add_argument('--clip', action='store_true', help="Extract audio clips of results.")
+    arg_parser.add_argument('--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip (implies --clip).")
+    arg_parser.add_argument('--force', action='store_true', help="Overwrite audio clips.")
+    arg_parser.add_argument('--full-height', action='store_true', help="Set this option if you want the entire frequency to be graphed, otherwise the audio will be resampled to 22,050Hz.")
+    arg_parser.add_argument('--timeseries', action='store_true', help="Extract audio clips of results.")
+    arg_parser.add_argument('--checklist', action='store_true', help="Create checklists.")
+    arg_parser.add_argument('-l', '--location', type=str, help="The name of a location specified in the config file, for use with checklists.")
+
+    arg_parser.add_argument('--disposition', default='all', nargs='+', choices=['all', 'confirmed', 'unconfirmed', 'excluded'], help="The analysis engine whose results you wish to return.")
+    arg_parser.add_argument('--add-detection', default=None, type=str, help="Add a manual detection in a CSV format with these fields in this order: (WAV file, start time, stop time, species code, probability, disposition) Example: 'DR10L_20251101_005921-0400.WAV,105,108,uplsan,.75,unconfirmed'")
+    arg_parser.add_argument('--update-detection', default=None, type=str, help="Add an entry to a CSV format with these fields in this order: (WAV file, start time, stop time, species code, probability, disposition) Example: 'DR10L_20251101_005921-0400.WAV,105,108,uplsan,.75,unconfirmed'")
+    return arg_parser
+
+def events_worker(twf, events):
+    twf.GetEvents()
+    # twf.SaveEvents()
+    events += twf.metadata['Events']
+
+def twf_worker(filename, section, taxonomy, found_files, startdt=None):
+    start = dt.strptime(str(os.path.basename(filename)), section['file_format'])
+    curfile = talonlib.TalonWAVFile(filename, section, taxonomy)
+
+    if startdt:
+        dur = curfile.metadata['Duration']
+        stop = start + timedelta(seconds=dur)
+        cur = startdt.astimezone(start.tzinfo)
+
+    if not startdt or (start <= cur < stop) or (start > cur):
+        found_files[curfile.metadata['File Name']] = curfile
+
+def extract_worker(twf, event, graph, force):
     try:
-        if filename.find('_') > 0:
-            metadata['wav'] = wavfile
-            g = guano.GuanoFile(wavfile)
+        twf.extract_audio(event, 3, 'clips', False, graph, force)
+    except KeyboardInterrupt:
+        dur_sec = event['stop'] - event['start']
+        print(f"Terminating worker for {event['dt'].strftime('%Y-%m-%d-%H:%M:%S')} - {(event['dt']+timedelta(seconds=dur_sec)).strftime('%Y-%m-%d-%H:%M:%S')}")
 
-            # we have guano metadata
-            if len(g.to_string()) > 0:
-                for key, value in g.items():
-                    if key == 'loc posiiton':
-                        vals = value.split(' ')
-                        metadata['latitude'] = vals[0]
-                        metadata['longitude'] = vals[1]
-                    elif key == 'timestamp':
-                        metadata['start_dt'] = dt.fromisoformat(value)
-                    elif key == 'TA|timezone':
-                        metadata['timezone'] = value
-                    elif key == 'TA|station':
-                        metadata['id'] = value
-            else:
-                fparsed = filename.split('_')
-                id = fparsed[0]
-                start_dt = dt.strptime(f"{fparsed[1]} {fparsed[2]}", '%Y%m%d %H%M%S%z')
+def add_detection(user_string, found_files):
+    # example user string
+    # TODO: validate cur[0] == str, cur[1:2] == int, cur[3] == str, cur[4] == int or float, cur[5] == str
+    # "DR10L_20251101_005921-0400.WAV,105,108,uplsan,.75,unconfirmed"
+    cur = user_string.split(',')
 
-                metadata['id'] = id
-                metadata['start_dt'] = start_dt
-    except (IndexError, ValueError) as e:
-        if DEBUG:
-            print(f"Error {e} when parsing filename: {wavfile}")
-
-    return metadata
-
-def get_events(wavfile: str, taxonomy: dict, timezone: str):
-    """
-    Reads detection events from both Nighthawk and BirdNET detections files, if present.
-
-    Args:
-        wavfile (str): The WAV file that the detections files should accompany.
-        taxonomy (dict): A taxonomy cross-reference dictionary used for translating Nighthawk IDs into eBird approved taxonomy. 
-        timezone (str): The timezone of the date/time associated with the detections file.
-
-    Returns:
-        list: A list containing dictionaries of each event. Each event will contain:
-            dt: the absolute date and time (datetime) of each event
-            probability: the probability or confidence of each detection
-            identity: the identified species
-            engine: the engine used to make the identificaiton
-            filepath: the path to the WAV file
-            start: start of the event in seconds
-            end: end of the event in seconds
-    """
-    events = []
-
-    nh_ext = '_detections.csv'
-    bn_ext = '_birdnet.csv'
-
-    curpath, filename = os.path.split(wavfile)
+    dest_path, filename = os.path.split(cur[0])
     filename, extension = os.path.splitext(filename)
-    bn_file = os.path.join(curpath, filename + bn_ext)
-    nh_file = os.path.join(curpath, filename + nh_ext)
+    ta_file = os.path.join(dest_path, str(filename) + '_talon.csv')
+    ta_fields = [ 'filename', 'orig_start', 'orig_end', 'orig_engine', 'orig_species', 'start', 'end', 'species_code', 'probability', 'disposition' ]
 
-    metadata = get_metadata(wavfile, timezone)
+    # filename,orig_start,orig_end,orig_engine,orig_species,start,end,species_code,probability,disposition
+    row = [ cur[0], 0, 0, '', '', cur[1], cur[2], cur[3], cur[4], cur[5] ]
 
-    if 'start_dt' in metadata:
-        # process birdnet detections
-        if os.path.exists(bn_file):
-            with open(bn_file) as f:
-                bn_tmp = [{k: v for k, v in row.items()}
-                    for row in csv.DictReader(f, skipinitialspace=True)]
+    print(f"Writing contents to {ta_file}: {row}")
 
-            for det in bn_tmp:
-                try:
-                    delta = timedelta(seconds=float(det['start_time']))
-                    abstime = metadata['start_dt'] + delta
-                    
-                    # add relative, to the wav file, start time
-                    mins, secs = divmod(float(det['start_time']), 60)
-                    hours, mins = divmod(mins, 60)
-                    start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
-
-                    events.append(
-                        { 
-                            'dt': abstime,
-                            'probability': float(det['confidence']),
-                            'identity': det['common_name'],
-                            'engine': 'bn',
-                            'filepath': wavfile,
-                            'start': float(det['start_time']),
-                            'start_rel': start_rel,
-                            'end': float(det['end_time']),
-                            'common_name': det['common_name'],
-                            'debug': ''
-                        }
-                    )
-                except TypeError as e:
-                    print(f"TypeError: {e}")
-                    print(metadata)
-                    print(det)
-
-        # process nighthawk detections
-        if os.path.exists(nh_file):
-            with open(nh_file) as f:
-                nh_tmp = [{k: v for k, v in row.items()}
-                    for row in csv.DictReader(f, skipinitialspace=True)]
-
-            for det in nh_tmp:
-                try:
-                    delta = timedelta(seconds=float(det['start_sec']))
-                    abstime = metadata['start_dt'] + delta
-
-                    # add relative, to the wav file, start time
-                    mins, secs = divmod(float(det['start_sec']), 60)
-                    hours, mins = divmod(mins, 60)
-                    start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
-                    
-                    # nighthawk uses ebird taxonomy codes as well as custom group
-                    # codes, we'll cross-reference them here to ensure conformity
-                    # with birdnet results
-                    if det['predicted_category'] in taxonomy:
-                        common_name = taxonomy[det['predicted_category']]
-                    else:
-                        common_name = det['predicted_category']
-
-                    events.append(
-                        { 
-                            'dt': abstime,
-                            'probability': float(det['prob']),
-                            'identity': det['predicted_category'],
-                            'engine': 'nh',
-                            'filepath': wavfile,
-                            'start': float(det['start_sec']),
-                            'start_rel': start_rel,
-                            'end': float(det['end_sec']),
-                            'common_name': common_name,
-                            'debug': ''
-                        }
-                    )
-                except TypeError as e:
-                    print(f"TypeError: {e}")
-                    print(metadata)
-                    print(det)
-
-    return events
-
-# TODO: accommodate nocturnal events, which will occur between the end of the DAY protocol, but before the NFC protocol.
-def classify_events(events: list, curloc: dict):
-    """
-    Classified detections event protocols based on the current location. Protocol will either be NFC or DAY.
-
-    Args:
-        events (list): A list of event dictionaries to be processed.
-        curloc (dict): A location dictionary which describes the area where the events were recorded. 
-    """
-    protocol = ""
-
-    curtz = pytz.timezone(curloc['timezone'])
-
-    important_dates = {}
-
-    for event in events:
-        curdate = event['dt'].date()
-        eventtime = event['dt']
-
-        if curdate not in important_dates:
-            location=LocationInfo(name=curloc['name'], region=curloc['region'], timezone=curloc['timezone'], latitude=curloc['latitude'], longitude=curloc['longitude'])
-
-            important_dates[curdate] = {}
-
-            important_dates[curdate]['midnight'] = curtz.localize(dt.combine(curdate, datetime.time(0,0,0)).replace(microsecond=0))
-            important_dates[curdate]['astrodawn'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dawn'].replace(microsecond=0)
-            important_dates[curdate]['astrodusk'] = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=curtz)['dusk'].replace(microsecond=0)
-            important_dates[curdate]['tomorrow'] = important_dates[curdate]['midnight'] + timedelta(seconds=86400)
-            important_dates[curdate]['sunset'] = sun(location.observer, date=curdate, tzinfo=curtz)['sunset'].replace(microsecond=0) + timedelta(minutes=20)
-            important_dates[curdate]['sunrise'] = sun(location.observer, date=curdate, tzinfo=curtz)['sunrise'].replace(microsecond=0) - timedelta(minutes=40)
-
-        if DEBUG:
-            event['debug']  = 'Local:\n'
-            event['debug'] += f"Event     : {eventtime}\n"
-            event['debug'] += f"Midnight  : {important_dates[curdate]['midnight']}\n"
-            event['debug'] += f"AstroDawn : {important_dates[curdate]['astrodawn']}\n"
-            event['debug'] += f"AstroDusk : {important_dates[curdate]['astrodusk']}\n"
-            event['debug'] += f"Tomorrow  : {important_dates[curdate]['tomorrow']}\n\n"
-
-            event['debug'] += f"{eventtime} >= {important_dates[curdate]['astrodusk']} = {eventtime >= important_dates[curdate]['astrodusk']} or\n"
-            event['debug'] += f"{eventtime} < {important_dates[curdate]['astrodawn']} = {eventtime < important_dates[curdate]['astrodawn']}\n"
-
-        # astrodawn/astrodusk are calculated for the day of each event, which means
-        # we're comparing against a non-contiguous range of time (e.g., the end of
-        # last night or the beginning of tonight)
-        if eventtime >= important_dates[curdate]['sunset'] or eventtime < important_dates[curdate]['sunrise']:
-            if eventtime >= important_dates[curdate]['astrodusk'] or eventtime < important_dates[curdate]['astrodawn']:
-                event['protocol'] = "nfc"
-            else:
-                event['protocol'] = "noc"
-        else:
-            event['protocol'] = "day"
-
-def extract_clip(event: dict, clip_dir: str = 'clips', force: bool = False):
-    """
-    Extract an audio clip for the supplied event.
-
-    Args:
-        event (dict): An event dict which we'll use to extract the audio clip.
-        clip_dir (str): Name of the directory to store clips in (default: clips).
-        force (bool): Whether or not to overwrite the clip file if it already exists. 
-    """
-    src_file = os.path.abspath(event['filepath'])
-    start = round(event['start'], 2)
-    end = round(event['end'], 2)
-    duration = round(end - start)
-    dest_path, filename = os.path.split(src_file)
-    dest_path = os.path.join(dest_path, clip_dir)
-    filename, extension = os.path.splitext(filename)
-    identity = event['identity']
-
-    output = os.path.join(dest_path, f"{filename}-{identity}-{start}-{end}{extension}")
-
-    if duration <= 0:
-        print(f"Invalid time range specified: start={start}, end={end}.")
+    # if file exists, append, otherwise create a new csv with header
+    if os.path.exists(ta_file):
+        # TODO: should attempt to read the file first and then verify that the row doesn't already exist
+        with open(ta_file, mode='a', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(row)
     else:
-        try:
-            if os.path.exists(src_file):
-                with wave.open(src_file, "rb") as f:
-                    # get file data
-                    nchannels = f.getnchannels()
-                    sampwidth = f.getsampwidth()
-                    framerate = f.getframerate()
+        with open(ta_file, "w", newline="") as csvfile:
+            # writer = csv.writer(csvfile, fieldnames=ta_fields)
+            writer.writerow(ta_fields)
+            writer.writerow(row)
 
-                    # set position in wave to start of segment
-                    f.setpos(int(start * framerate))
+def update_detection(user_string, events):
+    # example user string
+    # "2025-12-23-08:59:57-0500,Downy Woodpecker,confirmed"
+    cur = user_string.split(',')
+    row = []
 
-                    # extract data
-                    data = f.readframes(int((end - start) * framerate))
+    # {'filename': 'RPI1_20251223_080000-0500.WAV', 'dt': datetime.datetime(2025, 12, 23, 8, 0, 36, tzinfo=datetime.timezone(datetime.timedelta(days=-1, seconds=68400))),
+    # 'probability': 0.4682, 'species_code': 'tuftit', 'common_name': 'Tufted Titmouse', 'engine': 'bn', 'start': 36.0, 'start_rel': '00:00:36.00',
+    # 'stop': 39.0, 'disposition': 'unconfirmed', 'protocol': 'day', 'station': 'RPI1'}
+    ta_fields = [ 'filename', 'orig_start', 'orig_end', 'orig_engine', 'orig_species', 'start', 'end', 'species_code', 'probability', 'disposition' ]
 
-                if not os.path.exists(dest_path):
-                        os.mkdir(dest_path)
+    for ev in events:
+        if dt.fromisoformat(cur[0]) == ev['dt'] and cur[1] == ev['common_name']:
+            row = [ ev['filename'], ev['start'], ev['stop'], ev['engine'], ev['species_code'], ev['start'], ev['stop'], ev['species_code'], ev['probability'], cur[2] ]
 
-                if not os.path.exists(output) or force:
-                    if os.access(dest_path, os.W_OK):
-                        # write the extracted data to a new file
-                        with wave.open(output, 'w') as f:
-                            f.setnchannels(nchannels)
-                            f.setsampwidth(sampwidth)
-                            f.setframerate(framerate)
-                            f.setnframes(int(len(data) / sampwidth))
-                            f.writeframes(data)
-                    else:
-                        print(f"Permission denied while writing to {output}")
-                else:
-                    print('File exists, skipping. Use the --force option to regenerate the audio clip.')
+            dest_path, filename = os.path.split(ev['filename'])
+            filename, extension = os.path.splitext(filename)
+            ta_file = os.path.join(dest_path, str(filename) + '_talon.csv')
+
+            # if file exists, append, otherwise create a new csv with header
+            if os.path.exists(ta_file):
+                # TODO: should attempt to read the file first and then verify that the row doesn't already exist
+                with open(ta_file, mode='a', newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(row)
             else:
-                print(f"{event['filepath']} not found.")
-        except PermissionError as e:
-            print(f"Permission denied while creating {dest_path}")
-        except AttributeError as e:
-            print(f"AttributeError detected: {e}")
-        except Exception as e:
-            print(f"An unknown error occurred opening {src_file}. This error can be triggered when the format of the WAV file isn't supported: {e}")
+                with open(ta_file, "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile, fieldnames=ta_fields)
+                    writer.writeheader()
+                    writer.writerow(row)
 
-def generate_spectrograph(event: dict, clip_dir: str = 'clips', title: str = "", force: bool = False):
-    """
-    Generate a spectrograph of the supplied event.
+    # dest_path, filename = os.path.split(cur[0])
+    # filename, extension = os.path.splitext(filename)
+    # ta_file = os.path.join(dest_path, str(filename) + '_talon.csv')
+    # ta_fields = [ 'filename', 'orig_start', 'orig_end', 'orig_engine', 'orig_species', 'start', 'end', 'species_code', 'probability', 'disposition' ]
 
-    Args:
-        event (dict): An event dict which we'll use to generate the spectrograph.
-        clip_dir (str): Name of the directory to store graphs in (default: clips).
-        title (str): The title of the graph.
-        force (bool): Whether or not to overwrite the clip file if it already exists. 
-    """
-    
-    # these libraries take nearly 1.0s to import, which makes the cli
-    # app seem very sluggish, so we'll only import them when necessary.
-    # no risk of duplicate imports as python should only return a
-    # reference to the first instance of an imported module.
-    import numpy as np
-    import librosa
-    import matplotlib.pyplot as plt
+    # # filename,orig_start,orig_end,orig_engine,orig_species,start,end,species_code,probability,disposition
+    # row = [ cur[0], 0, 0, '', '', cur[1], cur[2], cur[3], cur[4], cur[5] ]
 
-    src_file = os.path.abspath(event['filepath'])
-    start = round(event['start'], 2)
-    end = round(event['end'], 2)
-    duration = round(end - start)
-    dest_path, filename = os.path.split(src_file)
-    dest_path = os.path.join(dest_path, clip_dir)
-    filename, extension = os.path.splitext(filename)
-    identity = event['identity']
+    # print(f"Writing contents to {ta_file}: {row}")
 
-    wavfile = os.path.join(dest_path, f"{filename}-{identity}-{start}-{end}{extension}")
+    # # if file exists, append, otherwise create a new csv with header
+    # if os.path.exists(ta_file):
+    #     # TODO: should attempt to read the file first and then verify that the row doesn't already exist
+    #     with open(ta_file, mode='a', newline='') as csvfile:
+    #         writer = csv.writer(csvfile)
+    #         writer.writerow(row)
+    # else:
+    #     with open(ta_file, "w", newline="") as file:
+    #         writer = csv.writer(csvfile, fieldnames=ta_fields)
+    #         writer.writeheader()
+    #         writer.writerow(row)
 
-    # we're using 22050 by default because this limits the graph y-axis to 12kHz
-    sr = 22050
-
-    hl = 32
-    nf = 2048
-    wl = 512
-
-    if os.path.exists(wavfile):
-        outfile, extension = os.path.splitext(wavfile)
-        outfile += '.png'
-
-        if not os.path.exists(outfile) or force:
-            # load audio file
-            y, sr = librosa.load(wavfile, sr=sr)
-            D = librosa.amplitude_to_db(np.abs(librosa.stft(y, hop_length=hl, n_fft=nf, win_length=wl)), ref=np.max)
-
-            # configure spectrogram
-            plt.figure(figsize=(15, 10), dpi=200)
-
-            librosa.display.specshow(D, sr=sr, x_axis='time', y_axis='linear', cmap='gray_r', hop_length=hl)
-            plt.title(title)
-            plt.xlabel('Time (s)')
-            plt.ylabel('Frequency (Hz)')
-
-            # Save spectrogram as image
-            plt.savefig(outfile, bbox_inches='tight', pad_inches=0.5)
-            plt.close()
-        else:
-            print('File exists, skipping. Use the --force option to regenerate the spectrograph.')
-
-def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str, ymax: int, tz: str):
+# def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str, ymax: int, tz: str, filename: str):
+def generate_timeseries_graph(events: list, frequency=5, ymax=None):
     """
     Generate a frequency graph of supplied events.
 
@@ -486,54 +182,69 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
         tz (str): The time zone of the data.
     """
     import math
+    import matplotlib
     import matplotlib.pyplot as plt
     import matplotlib.ticker as tck
     import matplotlib.dates as mdates
+
+    matplotlib.use('agg')
 
     rollavg = []
     buckets = []
     totals = []
     labels = []
-    max_value = ymax
 
-    if DEBUG:
-        print(f"start: {start_dt}, stop: {stop_dt}")
-        print(f"delta: {(stop_dt - start_dt).total_seconds()}, # of events: {len(events)}")
+    start_dt = events[0]['dt']
+    stop_dt = events[-1]['dt']
+    
+    title = ''
 
+    if ymax is None:
+        max_value = 0
+    else:
+        max_value = ymax
+
+    print(events, frequency, ymax)
     # create the frequency buckets before we iterate events
     if frequency > 0:
-        numbuckets = int(((stop_dt - start_dt).total_seconds() / 60) / frequency)
+        # print(f"(({stop_dt} - {start_dt}).total_seconds() / 60) / {frequency}")
+        # print((stop_dt - start_dt).total_seconds())
+        start = start_dt.replace(minute=0, second=0, microsecond=0)
+        stop = stop_dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1, minutes=frequency)
+
+        numbuckets = int(((stop - start).total_seconds() / 60) / frequency)
         interval = timedelta(minutes=frequency)
 
         # zero out start date so we can start on the hour and have our
         # x-axis labels look nice
-        cur = start_dt.replace(minute=0, second=0, microsecond=0)
+        # cur = start_dt.replace(minute=0, second=0, microsecond=0)
 
         # initialize buckets
         for i in range(0, numbuckets):
-            buckets.append(cur)
+            buckets.append(start)
             totals.append(0)
 
-            tmp = cur + interval
+            tmp = start + interval
 
             for event in events:
-                if DEBUG:
-                    print(f"({event['dt']} >= {cur})={event['dt'] >= cur} and ){event['dt']} < {tmp})={event['dt'] < tmp}")
+                # if DEBUG:
+                #     print(f"({event['dt']} >= {start})={event['dt'] >= start} and ){event['dt']} < {tmp})={event['dt'] < tmp}")
 
-                if event['dt'] >= cur and event['dt'] < tmp:
+                if event['dt'] >= start and event['dt'] < tmp:
                     totals[i] += 1
 
-            cur = tmp
+            start = tmp
 
         # add datetime labels
         for bucket in buckets:
             labels.append(bucket)
+            # print(bucket)
 
-        if DEBUG:
-            print(f"numbuckets: {numbuckets}, interval: {interval}")
+        # if DEBUG:
+        #     print(f"numbuckets: {numbuckets}, interval: {interval}")
 
-            for i in range(0, numbuckets):
-                print(labels[i], totals[i])
+        #     for i in range(0, numbuckets):
+        #         print(labels[i], totals[i])
 
     for i in range(numbuckets):
         # handle averaging the starting and ending buckets by making them 0
@@ -546,9 +257,10 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
         if i > max_value:
             max_value = math.ceil(i / 10.0) * 10
 
-    title += f" - {frequency * 3}-Minute Rolling Average"
+    title += f"{frequency * 3}-Minute Rolling Average"
     title += f"\n{buckets[0].strftime('%m/%d/%Y %H:%M:%S%z')} - {buckets[-1].strftime('%m/%d/%Y %H:%M:%S%z')}"
-    fig, ax = plt.subplots(figsize=(30, 15))
+
+    fig, ax = plt.subplots(figsize=(32, 18))
     plt.grid()
 
     plt.ylim(0, max_value)
@@ -559,7 +271,8 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
     plt.rcParams['timezone'] = 'US/Eastern'
 
     # Format the x-axis labels as dates
-    date_format = mdates.DateFormatter("%H:%M:%S", tz=pytz.timezone(tz))
+    # date_format = mdates.DateFormatter("%H:%M:%S", tz=pytz.timezone(tz))
+    date_format = mdates.DateFormatter("%H:%M:%S")
     ax.xaxis.set_major_formatter(date_format)
 
     # TODO: For long time periods, switch to using hourlocator instead,
@@ -575,510 +288,313 @@ def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency
     plt.plot(labels, rollavg)
     plt.fill_between(labels, rollavg, alpha=0.3)
 
-    plt.savefig('time-series.png', pad_inches=0.5, bbox_inches='tight')
+    plt.savefig('timeseries.png', pad_inches=0.5, bbox_inches='tight')
     plt.close()
 
-def generate_audacity_labels(events: list, force: bool = False):
-    """
-    Generate a audacity labels for the supplied events. Each respective WAV file will get an Audacity label file containing only the corresponding events.
+def generate_checklists(section, events):
+    # TODO: Warning, there's the risk of getting the dates/times wrong
+    # as we're blindly casing the datetimes of the events as the time
+    # zone supplied in the section. For now it's up to the user to not
+    # mix up events from different locations.
 
-    Args:
-        events (list): A list of event dicts which we'll use to generate the label files.
-        force (bool): Whether or not to overwrite the clip file if it already exists. 
-    """
-    aud_ext = '_audacity.txt'
-    audiofiles = []
+    # start at midnight of the date of the first event, just so we
+    # are sure our checklist windows are full hours
+    curtz = ZoneInfo(section['timezone'])
+    start_date = dt.combine(events[0]['dt'].date(), dtt(0,0,0)).replace(microsecond=0)
 
-    audiofiles = set(event['filepath'] for event in events)
+    ts = talonlib.TalonSchedule(
+        section['latitude'],
+        section['longitude'],
+        section['timezone'],
+        section['name'],
+        start_date
+    )
 
-    for af in audiofiles:
-        af_events = [e for e in events if e['filepath'] == af]
+    checklists = []
 
-        curpath, filename = os.path.split(af)
-        filename, extension = os.path.splitext(filename)
-        
-        audacity_file = os.path.join(curpath, filename + aud_ext)
-
-        with open(audacity_file, 'w') as f:
-            for af_event in af_events:
-                if af_event['filepath'] == af:
-                    f.write(f"{af_event['start']:-0.2f}\t{af_event['end']:-0.2f}\t{af_event['identity']} ({af_event['engine']} {float(af_event['probability']):-0.2f})\n")
-
-def get_chklst_buckets(events: list, start_dt: dt, stop_dt: dt, vals: dict):
-    """
-    Group events into checklist like buckets of up to an hour each while respecting NFC protocol limitations.
-
-    Args:
-        events (list): A list of event dicts which we'll use to generate the label files.
-        start_dt (datetime): The start time of data we wish to process.
-        stop_dt (datetime): The stop time of data we wish to process.
-        vals (dict): A dictionary containing miscellaneous location related values.
-    
-    Returns:
-        list: A list of bucket dicts.
-    """
-
-    protocol = "DAY"
-    curtz = pytz.timezone(vals['timezone'])
-    onehour = 3600
-
-    startdate = start_dt.replace(minute=0, second=0, microsecond=0)
-    stopdate = stop_dt.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
-
-    curdate = startdate.date()
-
-    # try:
-    # TODO: Calculate sunset and sunrise, 20 minutes after sunset is when NOC begins, 40 minutes before sunrise is when NOC ends
-    location=LocationInfo(name=vals['name'], region=vals['region'], timezone=vals['timezone'], latitude=vals['latitude'], longitude=vals['longitude'])
-
-    AstronomicalDawn = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=pytz.utc)['dawn'].replace(microsecond=0)
-    AstronomicalDusk = sun(location.observer, date=curdate, dawn_dusk_depression=18, tzinfo=pytz.utc)['dusk'].replace(microsecond=0)
-    Sunset = sun(location.observer, date=curdate, tzinfo=curtz)['sunset'].replace(microsecond=0) + timedelta(minutes=20)
-    Sunrise = sun(location.observer, date=curdate, tzinfo=curtz)['sunrise'].replace(microsecond=0) - timedelta(minutes=40)
-
-    AstronomicalDawnLocal = AstronomicalDawn.astimezone(curtz)
-    AstronomicalDuskLocal = AstronomicalDusk.astimezone(curtz)
-    SunsetLocal = Sunset.astimezone(curtz)
-    SunriseLocal = Sunrise.astimezone(curtz)
-
-    MidnightLocal = curtz.localize(dt.combine(curdate, datetime.time(0,0,0))).replace(microsecond=0)
-
-    tomorrow = MidnightLocal + datetime.timedelta(seconds=86400)
-
-    start = startdate
-    buckets = []
-
-    if DEBUG:
-        output = ""
-
-        output += f"Location Details\n"
-        output += f"------------------------------------------------\n"      
-        output += f"Name       : {vals['name']}\n"
-        output += f"Region     : {vals['region']}\n"
-        output += f"TimeZone   : {vals['timezone']}\n"
-        output += f"Latitude   : {vals['latitude']}\n"
-        output += f"Longitude  : {vals['longitude']}\n"
-        output += f"Date       : {curdate}\n"
-        output += f"Start Time : {start_dt.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Stop Time  : {stop_dt.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Start Date : {startdate.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Stop Date  : {stopdate.strftime('%Y%m%d %H:%M:%S %Z')}\n\n"
-        
-
-        output += f"Time Zone: UTC\n"
-        output += f"------------------------------------------------\n"
-        output += f"Astronomical Dawn : {AstronomicalDawn.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Sunrise           : {Sunrise.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Sunset            : {Sunset.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Astronomical Dusk : {AstronomicalDusk.strftime('%Y%m%d %H:%M:%S %Z')}\n\n"
-
-        output += f"Time Zone: {vals['timezone']}\n"
-        output += f"------------------------------------------------\n"      
-        output += f"Astronomical Dawn : {AstronomicalDawnLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Sunrise           : {SunriseLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Sunset            : {SunsetLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Astronomical Dusk : {AstronomicalDuskLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-
-        print(output)
-
-    while True:
-        # midnight to astrodawn
-        if start < AstronomicalDawnLocal:
-            if (AstronomicalDawnLocal - start).total_seconds() >= onehour:
-                stop = start+timedelta(seconds=onehour)
-            else:
-                stop = AstronomicalDawnLocal
-
-            protocol = 'NFC'
-
-        # astrodawn to next hour
-        elif start == AstronomicalDawnLocal:
-            stop = start.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
-            protocol = 'DAY'
-
-        # next hour to astrodusk
-        elif start < AstronomicalDuskLocal:
-            if (AstronomicalDuskLocal - start).total_seconds() >= onehour:
-                stop = start+timedelta(seconds=onehour)
-            else:
-                stop = AstronomicalDuskLocal
-
-            protocol = 'DAY'
-
-        # astrodusk to next hour
-        elif start == AstronomicalDuskLocal:
-            stop = start.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
-
-            protocol = 'NFC'
-
-        # next hour to midnight
-        elif start > AstronomicalDuskLocal:
-            stop = start+timedelta(seconds=onehour)
-
-            protocol = 'NFC'
-
-        curdict = {}
-        curdict['start'] = start
-        curdict['stop'] = stop
-        curdict['protocol'] = protocol
-        curdict['items'] = []
-
-        for event in events:
-            curdt = event['dt']
-            
-            if curdict['stop'] > curdt >=curdict['start']:
-                curdict['items'].append(event)
-
-        buckets.append(curdict)
-
-        if stop >= stopdate:
+    for window in ts:
+        if window['start'] > events[-1]['dt'].astimezone(curtz):
             break
         else:
-            if stop == tomorrow:
-                AstronomicalDawn = sun(location.observer, date=stop, dawn_dusk_depression=18, tzinfo=pytz.utc)['dawn'].replace(microsecond=0)
-                AstronomicalDusk = sun(location.observer, date=stop, dawn_dusk_depression=18, tzinfo=pytz.utc)['dusk'].replace(microsecond=0)
+            curcheck = {}
 
-                AstronomicalDawnLocal = AstronomicalDawn.astimezone(curtz)
-                AstronomicalDuskLocal = AstronomicalDusk.astimezone(curtz)
-                MidnightLocal = curtz.localize(dt.combine(stop, datetime.time(0,0,0))).replace(microsecond=0)
+            curcheck['start'] = window['start'].replace(microsecond=0)
+            curcheck['stop'] = window['stop'].replace(microsecond=0)
+            curcheck['protocol'] = window['protocol']
+            curcheck['species'] = {}
 
-                tomorrow = MidnightLocal + datetime.timedelta(seconds=86400)
+            for evt in events:
+                if window['start'] <= evt['dt'].astimezone(curtz) < window['stop']:
+                    name = f"{evt['common_name']} ({evt['species_code']})"
 
-            start = stop
+                    if name in curcheck['species']:
+                        curcheck['species'][name] += 1
+                    else:
+                        curcheck['species'][name] = 1
+            
+            checklists.append(curcheck)
 
-    return buckets
+    output = ''
+    max = 0
+    i = 0
 
-def generate_summary(events: dict):
-    """
-    Generate a checklist like summary of the supplied events. Complements get_chklst_buckets().
+    for ckl in checklists:
+        if len(ckl['species']) > 0:
+            max += 1
 
-    Args:
-        events (list): A list of event dicts which we'll use to generate summaries.
-    
-    Returns:
-        str: A string of the summary.
-    """
-    output = ""
-    summary = {}
-    
-    for event in events:
-        if event['engine'] == 'nh':
-            common_name = f"{event['common_name']} ({event['identity']})"
-        else:
-            common_name = event['common_name']
+    for ckl in checklists:
+        if len(ckl['species']) > 0:
+            i += 1
+            total_individuals = 0
 
-        if common_name in summary:
-            summary[common_name] += 1
-        else:
-            summary[common_name] = 1
+            duration = ckl['stop'] - ckl['start']
 
-    summary = dict(sorted(summary.items()))
+            for species in ckl['species']:
+                total_individuals += ckl['species'][species]
 
-    for item in summary:
-        output += f"  - {item} | NFC {summary[item]}\n"
+            output += '*' * 42 + '\n'
+            output += f"* Checklist: {i} of {max}\n"
+            output += '*' * 42 + '\n'
+            output += f"Start Time     : {ckl['start']}\n"
+            output += f"Stop Time      : {ckl['stop']}\n"
+            output += f"Duration       : {duration}\n"
+            output += f"Location       : {section['name']}\n"
+            output += f"eBird Protocol : {ckl['protocol']}\n"
+            # output += f"Total Species  : {len(ckl['species'])}\n"
+            output += f"Total Calls    : {total_individuals}\n"
+            output += '-' * 42 + '\n'
+
+            # sort species in alphabetical order
+            spc = sorted(ckl['species'], key=lambda d: d)
+
+            for species in spc:
+                output += f"{ckl['species'][species]:>2} - {species}\n"
+
+            output += '\n'
     
     return output
 
-def ParseCommandLineArguments():
-    arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="talon is a tool for processing Nighthawk and BirdNET detection files.")
-    arg_parser.add_argument('--config', default="/opt/talon/etc/talon.ini", type=str, help="Path to a configuration file.")
-
-    arg_parser.add_argument('-p', '--path', default=".", type=str, help="Directory or file to parse.")
-    arg_parser.add_argument('-r', '--recurse', action='store_true', help="Recursively descend into sub-directories looking for additional files.")
-
-    arg_parser.add_argument('--protocol', default='all', choices=['all', 'nfc', 'noc', 'day',], help="The eBird protocol whose results you wish to return.")
-    arg_parser.add_argument('-e', '--engine', default='all', choices=['all', 'bn', 'nh'], help="The analysis engine whose results you wish to return.")
-    arg_parser.add_argument('--filter', type=str, help="Path to a text file containing names of species to exclude from any results.")
-    arg_parser.add_argument('-i', '--identity', default="all", nargs='+', help="Common name of a bird (e.g., woothr, Barn Owl, etc) you wish to work with.")
-    arg_parser.add_argument('-b', '--bn-threshold', default=0.75, type=float, help="Only generate labels for BirdNET detections above this probability level.")
-    arg_parser.add_argument('-n', '--nh-threshold', default=0.85, type=float, help="Only generate labels for Nighthawk detections above this probability level.")
-
-    arg_parser.add_argument('--clip', action='store_true', help="Extract audio clips of results.")
-    arg_parser.add_argument('-g', '--graph', action='store_true', help="Generate a spectrograph for the extracted audio clip (implies --clip).")
-    arg_parser.add_argument('--start-date', type=dt.fromisoformat, help="A datetime in ISO format.", default=None)
-    arg_parser.add_argument('--stop-date', type=dt.fromisoformat, help="A datetime in ISO format.", default=None)
-    arg_parser.add_argument('--title', type=str, help="A title for the time-series graph.")
-    arg_parser.add_argument('--y-axis-max', type=int, help="Maximum height of the y-axis for the time-series chart, the max total for any bucket will take precedence over this value.")
-
-    arg_parser.add_argument('--longitude', type=validate_longitude, help="Longitude, in decimal format, of the location where the audio was recorded.")
-    arg_parser.add_argument('--latitude', type=validate_latitude, help="Latitude, in decimal format, of the location where the audio was recorded.")
-    arg_parser.add_argument('--timezone', type=validate_timezone, help="Timezone of the location where the audio was recorded.")
-    arg_parser.add_argument('--region', type=str, help="Region of the location where the audio was recorded")
-    arg_parser.add_argument('--name', type=str, help="A descriptive name of the location where the audio was recorded")
-    arg_parser.add_argument('--location', type=str, help="The name of an ebird location or hotspot for your NFC station.")
-
-    display = arg_parser.add_mutually_exclusive_group()
-    display.add_argument('--labels', action='store_true', help="Generate Audacity labels of the selected data for all files.")
-    display.add_argument('--summary', action='store_true', help="Display a summary of the selected data.")
-    display.add_argument('--timeseries', default=0, type=int, help="Display a graph of events, grouped by the supplied value (in minutes).")
-    display.add_argument('--groups', action='store_true', help="Display a summary of all group codes used by Nighthawk")
-    display.add_argument('--checklist', action='store_true', help="Create pseudo 'checklists' out of the selected data.")
-
-    arg_parser.add_argument('-f', '--force', action='store_true', help="Force the recreation of lables, clips, or graphs if they already exist.")
-    arg_parser.add_argument('-d', '--debug', action='store_true', help="Display information which may be helpful for debugging.")
-    arg_parser.add_argument('-v', '--verbose', action='store_true', help="Display more information about what talon is doing.")
-
-    return arg_parser
-
 def main():
-    signal.signal(signal.SIGINT, signal_handler)
+    signal(SIGINT, signal_handler)
+
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    CYAN = '\033[36m'
+    RESET = '\033[0m'
 
     arg_parser = ParseCommandLineArguments()
     args = arg_parser.parse_args()
 
-    global GROUPCODES
-    global DEBUG
-    DEBUG = args.debug
+    tc = talonlib.TalonConfig(args.config)
+    config = tc.config
 
-    output = ""
-    globstr = "*.[wW][aA][vV]"
-
-    vals = {}
-
-    # read values from a config file instead, if we can't read all values
-    # from the config file, then exit so we're not using a mix of cli and
-    # config values
-    if os.path.exists(args.config):
-        try:
-            config = configparser.ConfigParser()
-            config.read(args.config)
-
-            vals['latitude'] = validate_latitude(config['location']['latitude']) if args.latitude is None else args.latitude
-            vals['longitude'] = validate_longitude(config['location']['longitude']) if args.longitude is None else args.longitude
-            vals['timezone'] = validate_timezone(config['location']['timezone']) if args.timezone is None else args.timezone
-            vals['region'] = config['location']['region'] if args.region is None else args.region
-            vals['name'] = config['location']['name'] if args.name is None else args.name
-            vals['location'] = config['ebird']['location'] if args.location is None else args.location
-            vals['filter'] = config['general']['filter'] if args.filter is None else args.filter
-            vals['title'] = config['chart']['title'] if args.title is None else args.title
-            vals['y-axis-max'] = int(config['chart']['y-axis-max']) if args.y_axis_max is None else args.y_axis_max
-            vals['ebird_tax'] = config['general']['ebird_taxonomy']
-            vals['group_xrf'] = config['general']['group_code_xref']
-        except configparser.MissingSectionHeaderError as e:
-            print(f"Error parsing config, the supplied config file contains no section headers.")
-            sys.exit(1)
-        except KeyError as e:
-            if DEBUG:
-                print(f"Error parsing config, unable to find key: {e}, using commandline arguments instead (if available.)")
-        except argparse.ArgumentTypeError as e:
-            print(f"Error parsing config, invalid value specified for: {e}")
-            sys.exit(1)
-
-    if args.filter is not None:
-        vals['filter'] = args.filter
-    elif os.path.exists('filter.csv'):
-        vals['filter'] = 'filter.csv'
-
-    curtz = pytz.timezone(vals['timezone'])
-
+    sfilter = {}
     taxonomy = {}
     groupcodexref = {}
 
-    # check path listed in ini file first, then in the cwd
-    # then finally in the dir created by pyinstaller
-    ebird_tax = [
-        vals['ebird_tax'],
-        '_internal/eBird_taxonomy_v2024.csv'
-    ]
+    find_result = []
+    events = []
 
-    group_xrf = [
-        vals['group_xrf'],
-        '_internal/group_code_xref.csv'
-    ]
+    globstr = "*.[wW][aA][vV]"
 
-    # load common names and group code cross-reference
-    for i in ebird_tax:
-        if os.path.exists(i):
-            with open(i, mode='r') as infile:
+    found_files = {}
+
+    output = ""
+    mp_twf_list = []
+
+    maxid = 0
+    maxstation = 0
+
+    last_section = ""
+
+    if args.add_detection:
+        add_detection(args.add_detection, found_files)
+        sys.exit(0)
+
+    # load the species filter, taxonomy, and group code xref
+    if 'general' in config and 'species_filter' in config['general']:
+        if os.path.exists(config['general']['species_filter']):
+            with open(config['general']['species_filter'], mode='r') as infile:
                 reader = csv.reader(infile)
-                taxonomy = { rows[2]:rows[4] for rows in reader }
-            
-            break
+                sfilter = { row[0]:float(row[1]) for row in reader }
 
-    for i in group_xrf:
-        if os.path.exists(i):
-            with open(i, mode='r') as infile:
+    if 'general' in config and 'ebird_taxonomy' in config['general']:
+        if os.path.exists(config['general']['ebird_taxonomy']):
+            with open(config['general']['ebird_taxonomy'], mode='r') as infile:
                 reader = csv.reader(infile)
-                groupcodexref = { rows[0]:rows[1] for rows in reader }
-            
-            break
+                taxonomy = { row[2]:row[4] for row in reader }
 
+    if 'general' in config and 'group_code_xref' in config['general']:
+        if os.path.exists(config['general']['group_code_xref']):
+            with open(config['general']['group_code_xref'], mode='r') as infile:
+                reader = csv.reader(infile)
+                groupcodexref = { row[0]:row[1] for row in reader }
+
+    # combine taxonomy and groupcodexref so we can render nighthawk
+    # group codes as standard eBird 'spuhs'
     taxonomy = taxonomy | groupcodexref
 
-    events = []
-    audiofiles = []
-
-    if os.path.isfile(args.path):
-        audiofiles.append(args.path)
-        events = get_events(args.path, taxonomy, vals['timezone'])
-    elif not os.path.exists(args.path):
-        print(f"Path not found: {args.path}")
-        sys.exit(1)
-    else:
+    if not args.file:
+        # Can only iterate a generator once, so we'll convert it to a list
         if args.recurse:
-            for wavfile in Path(args.path).rglob(globstr):
-                audiofiles.append(wavfile)
-                events += get_events(wavfile, taxonomy, vals['timezone'])
+            find_result = list(Path(args.path).rglob(globstr))
         else:
-            for wavfile in Path(args.path).glob(globstr):
-                audiofiles.append(wavfile)
-                events += get_events(wavfile, taxonomy, vals['timezone'])
+            find_result = list(Path(args.path).glob(globstr))
+    else:
+        find_result = [args.file]
 
-    # need this try/except to handle broken pipes when using 'less' under linux
-    try:
-        if len(events) > 0:
-            events = sorted(events, key=lambda d: d['dt'])
-            classify_events(events, vals)
+    # spinning off twf creation into separate threads improves performance
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        for filename in find_result:
+            for section in config:
+                if 'type' in config[section] and config[section]['type'] == 'station':
+                    try:
+                        if str(filename).split('_')[0] == section:
+                            last_section = section
+                            future = executor.submit(twf_worker, filename, config[section], taxonomy, found_files, args.start)
+                    except ValueError as e:
+                        pass
 
-            # if an identity was specified we don't need to waste time loading the filter
-            # table from disk, just limit to what the user supplied
-            if args.identity != 'all':
-                events = [d for d in events if d['common_name'] in args.identity]
+    # spinning off event gathering into separate threads improves performance
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        for file in found_files:
+            future = executor.submit(events_worker, found_files[file], events)
+
+    # if an identity was specified we don't need to waste time loading the filter
+    # table from disk, just limit to what the user supplied
+    if args.species != 'all':
+        events = [d for d in events if d['common_name'] in args.species]
+
+    if args.protocol != 'all':
+        events = [d for d in events if d['protocol'] in args.protocol]
+
+    if args.engine != 'all':
+        events = [d for d in events if d['engine'] in args.engine]
+
+    if args.station != 'all':
+        events = [d for d in events if d['station'] in [args.station]]
+
+    if args.disposition != 'all':
+        events = [d for d in events if d['disposition'] in args.disposition]
+
+    events = [d for d in events if d['probability'] >= args.threshold]
+
+    events = [d for d in events if d['common_name'] not in sfilter or d['probability'] > sfilter[d['common_name']]]
+    # events = [d for d in events if d['species_code'] not in sfilter or d['probability'] > sfilter[d['species_code']]]
+
+    # sort all events by date
+    events = sorted(events, key=lambda d: d['dt'])
+
+    if events:
+        if args.start:
+            # TODO: Figure out a better way of determining the appropriate timezone
+            window_start = args.start.astimezone(events[0]['dt'].tzinfo)
+
+            if not args.duration:
+                duration = timedelta(hours=24)
             else:
-                # load a list of identites to exclude from disk
-                if os.path.exists(vals['filter']):
-                    with open(vals['filter']) as f:
-                        filter = f.read()
+                duration = timedelta(hours=args.duration)
 
-                    filter = filter.splitlines()
-                else:
-                    filter = []
+            window_end = window_start + duration
 
-                # filter out the identities loaded from disk
-                events = [d for d in events if d['common_name'] not in filter]
+        if args.update_detection:
+            update_detection(args.update_detection, events)
 
-            # limit events to protocol, if requested
-            if args.protocol != 'all':
-                events = [d for d in events if d['protocol'] in [args.protocol]]
+        if args.json:
+            print(json.dumps(events, default=json_dt_serialize, indent=4, sort_keys=True))
+            sys.exit(0)
 
-            # limit events to analysis engine, if requested
-            if args.engine != 'all':
-                events = [d for d in events if d['engine'] in [args.engine]]
+        for ev in events:
+            # if user didn't specify a start date, or if they did and the event falls within the
+            # calculated range (start + duration)
+            if not args.start or (ev['dt'] >= window_start and ev['dt'] <= window_end):
+                if ev['probability'] > args.threshold and (ev['common_name'] not in sfilter or ev['probability'] > sfilter[ev['common_name']]):
+                    idlen = len(ev['species_code'])
+                    stnlen = len(ev['station'])
 
-            # this loop is the same speed as list comprehension, and a bit more readable
-            tmp = []
+                    if idlen > maxid:
+                        maxid = idlen
 
-            # exclude any event below each engine's respective threshold
-            for event in events:
-                if (event['engine'] == 'bn' and event['probability'] >= args.bn_threshold) or (event['engine'] == 'nh' and event['probability'] >= args.nh_threshold):
-                    tmp.append(event)
+                    if stnlen > maxstation:
+                        maxstation = stnlen
 
-            events = tmp
+        # the main part of the app, iterate all events filtering for
+        # only the events that were requested.
+        for ev in events:
+            # if user didn't specify a start date, or if they did and the event falls within the
+            # calculated range (start + duration)
+            if not args.start or (ev['dt'] >= window_start and ev['dt'] <= window_end):
+                # if ev['probability'] > args.threshold and (ev['common_name'] not in sfilter or ev['probability'] > sfilter[ev['common_name']]):
+                idlen = len(ev['species_code'])
+                stnlen = len(ev['station'])
 
-            # generate a summary of all remaning events
-            if args.summary:
-                summary = {}
-                event_total = 0
+                if args.clip or args.graph:
+                    start = ev['start']
+                    duration = ev['stop'] - start
 
-                for event in events:
-                    event_total += 1
-
-                    if event['engine'] == 'nh':
-                        common_name =  f"{event['engine']}  {event['common_name']} ({event['identity']})"
-                    else:
-                        common_name = f"{event['engine']}  {event['identity']}"
-                    
-                    if common_name in summary:
-                        summary[common_name] += 1
-                    else:
-                        summary[common_name] = 1
-
-                summary = dict(sorted(summary.items()))
-
-                for item in summary:
-                    output += f"{summary[item]:4d}  {(summary[item]/event_total)*100:-5.2f}%  {item}\n"
-
-                output += '-' * 20 + '\n'
-                output += f"{event_total:4d}  Total"
-            # extract clips and generate graphs, note that --graph implies --clip
-            elif not args.checklist and (args.clip or args.graph):
-                for event in events:
-                    if args.clip or args.graph:
-                        extract_clip(event, 'clips', args.force)
-                    
-                    if args.graph:
-                        title = f"{event['common_name']} ({float(event['probability'])*100:-0.2f}%) {event['dt']}\n"
-                        title += f"{event['filepath']}"
-                        generate_spectrograph(event, 'clips', title, args.force)
-            elif args.timeseries > 0:
-                if args.start_date and args.stop_date:
-                    start_dt = curtz.localize(args.start_date)
-                    stop_dt = curtz.localize(args.stop_date)
-                else:
-                    start_dt = events[0]['dt']
-                    stop_dt = events[-1]['dt']
-                
-                generate_timeseries_graph(events, start_dt, stop_dt, args.timeseries, vals['title'], vals['y-axis-max'], vals['timezone'])
-            elif args.labels:
-                generate_audacity_labels(events, args.force)
-            elif args.groups:
-                output = GROUPCODES
-            elif args.checklist and len(events) > 0:
-                if args.start_date and args.stop_date:
-                    start_dt = args.start_date
-                    stop_dt = args.stop_date
-                else:
-                    start_dt = events[0]['dt']
-                    stop_dt = events[-1]['dt']
-
-                nfcbuckets = get_chklst_buckets(events, start_dt, stop_dt, vals)
-
-                # display a checklist-like summary of each bucket
-                for bucket in nfcbuckets:
-                    if bucket['protocol'] == 'NFC' and len(bucket['items']) > 0:
-                        protocol = "Nocturnal Flight Call Count"
-                    else:
-                        protocol = "Daytime Protocol"
-
-                    chklst_date = bucket['start'].date().strftime('%b %d, %Y')
-                    chklst_start = bucket['start']
-                    chklst_dur = (bucket['stop'] - bucket['start'])
-
-                    # NFC checklists have to be under an hour, we can't do an hour exactly, or 59:59s because 
-                    # ebird doesn't track seconds. So if duration is 60 minutes then it's actually 59 minutes.
-                    if chklst_dur == timedelta(minutes=60):
-                        chklst_dur = chklst_dur - timedelta(minutes=1)
-
-                    chklst_dur = math.floor(chklst_dur.total_seconds() / 60.0)
-
-                    if len(bucket['items']) > 0:
-                        output += f"Location: {vals['location']}\nObservation date: {chklst_date}\nStart Time: {chklst_start:%H:%M:%S}\nDuration: {chklst_dur} minutes\nProtocol - {protocol}\n"
-                        output += generate_summary(bucket['items']) + '\n'
+                    dest_path, filename = os.path.split(ev['filename'])
+                    dest_path = os.path.join(dest_path, 'clips')
+                    filename, extension = os.path.splitext(filename)
 
                     if args.clip or args.graph:
-                        for event in bucket['items']:
-                            extract_clip(event, bucket['start'].strftime('%H%M%S'), args.force)
-
-                            if args.graph:
-                                # plot title
-                                title = f"{event['common_name']} ({event['probability']*100:-5.2f}%) {event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}\n"
-                                filename, filepath = os.path.split(event['filepath'])
-                                title += f"{filename}"
-
-                                generate_spectrograph(event, bucket['start'].strftime('%H%M%S'), title, args.force)
-            else:
-                # print detail for all remaining events
-                for event in events:
-                    if event['engine'] == 'nh':
-                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-6.2f}%  {event['engine']}  {event['protocol']}  {event['common_name']} ({event['identity']})\n"
+                        cur = found_files[ev['filename']]
+                        mp_twf_list.append([cur, ev, args.graph, args.force])
+                else:
+                    if ev['disposition'] == 'confirmed':
+                        color = GREEN
+                    elif ev['disposition'] == 'excluded':
+                        color = RED
+                    elif ev['overridden']:
+                        color = CYAN
                     else:
-                        output += f"{event['dt'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]}  {event['start_rel']}  {event['probability']*100:-6.2f}%  {event['engine']}  {event['protocol']}  {event['identity']}\n"
+                        color = RESET
 
-                    if DEBUG:
-                        output += event['debug'] + '\n'
+                    # accepted iso formats:
+                    # https://docs.python.org/3/library/datetime.html#datetime.datetime.fromisoformat
+                    output += f"{color}{ev['dt'].isoformat(timespec='milliseconds')}  "
+                    output += f"{ev['start_rel']}  {ev['station']:{maxstation}}  "
+                    output += f"{ev['protocol']:3}  {ev['engine']:2}  "
+                    output += f"{ev['probability']*100:>6.2f}%  {ev['common_name']} ({ev['species_code']}){RESET}\n"
+
+    if args.timeseries:
+        generate_timeseries_graph(events, frequency=5)
+
+    elif args.checklist:
+        if not args.location:
+            section = config['general']['default']
         else:
-            output = "No events found.\n"
+            section = args.location
 
-        if len(output) > 0:
-            print(output.rstrip())
+        if events:
+            output = generate_checklists(config[section], events)
+        else:
+            output = "No events to add to a checklist."
 
-        sys.stdout.flush()
-    except BrokenPipeError:
-        # Python flushes standard streams on exit; redirect remaining output
-        # to devnull to avoid another BrokenPipeError at shutdown
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, sys.stdout.fileno())
-        sys.exit(1)  # Python exits with error code 1 on EPIPE
+        print(output.strip())
+
+    # matplotlib is not thread safe, so we have to use multiprocessing
+    # this is very fast, reducing the clip/graph rendering time from an
+    # average of 2-3s, to 0.47s. Reducing the core allocation by 1 to
+    # give the OS a core to do housekeeping with. Additionally, you can't
+    # CTRL-C a worker proc safely in Windows without using the 'with pool'
+    # context.
+    elif args.clip or args.graph:
+        try:
+            with Pool(processes=os.cpu_count() - 1) as p:
+                res = p.starmap_async(extract_worker, mp_twf_list)
+
+                while not res.ready():
+                    time.sleep(1)
+
+                result = res.get()
+        except KeyboardInterrupt:
+            print('Exiting')
+            p.close()
+    
+        p.join()
+    else:
+        print(output.strip())
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
