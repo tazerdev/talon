@@ -30,8 +30,14 @@ git clone https://github.com/tazerdev/talon.git
 
 The next step is to create a Python venv for the project. I like to keep my venvs together so I don't have them scattered about. In this example I create a Talon virtual environment under the venvs folder.
 
- Windows & Linux
-: 
+```shell
+mkdir C:/Users/username/venvs
+cd C:/Users/username/venvs
+python -m venv talon-venv
+```
+
+Linux:
+
 ```shell
 mkdir /home/username/venvs
 cd /home/username/venvs
@@ -78,21 +84,21 @@ The typical way to execute a Python script, under Windows, is to provide the ful
 C:/Users/username/devel/venvs/talon-venv/Scripts/python.exe C:/Users/username/devel/talon/bin/talon-gui -c C:/Users/username/devel/talon/etc/talon.ini
 ```
 
-If you're using PowerShell, which is recommended, then you can run a script to turn each command into a short alias:
+If you're using PowerShell, recommended if using Windows, then you can run a script to turn each command into a short alias:
 
 ```shell
 . C:/Users/username/talon/bin/Add-TalonAliases.ps1
 ```
 
-The alias equivalent to the command above is simply:
+Or if you're using the BASH shell, recommended if using Linux, then you can run a similar aliases script like so:
 
 ```shell
-talon-gui
+source /home/username/talon/bin/Add-TalonAliases.sh
 ```
 
 ## Post-Installation
 
-Once the installation is complete, you just need to run the following commands in a new PowerShell window:
+Once the installation is complete, you just need to run the following commands in a new terminal window to start using the utilities:
 
 Windows:
 
