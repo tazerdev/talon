@@ -15,14 +15,14 @@ First, on the CLI, navigate to the location you prefer for the Talon repository 
 Windows:
 
 ```shell
-cd C:\Users\mark\devel
+cd C:/Users/username/devel
 git clone https://github.com/tazerdev/talon.git
 ```
 
 Linux:
 
 ```shell
-cd C:\Users\mark\devel
+cd C:/Users/username/devel
 git clone https://github.com/tazerdev/talon.git
 ```
 
@@ -40,7 +40,7 @@ And then activate it:
 Windows:
 
 ```shell
-& C:/Users/mark/devel/venvs/talon-venv/Scripts/Activate.ps1
+& C:/Users/username/devel/venvs/talon-venv/Scripts/Activate.ps1
 ```
 
 Linux:
@@ -56,14 +56,14 @@ Talon requires a number of additional Python modules in order to work. These dep
 Windows:
 
 ```shell
-cd C:\Users\mark\devel\talon
-pip install -r .\requirements.txt
+cd C:/Users/username/devel/talon
+pip install -r ./requirements.txt
 ```
 
 Linux:
 
 ```shell
-cd /home/mark/devel/talon
+cd /home/username/devel/talon
 pip install -r ./requirements.txt
 ```
 
@@ -72,13 +72,13 @@ pip install -r ./requirements.txt
 The typical way to execute a Python script, under Windows, is to provide the full path to the Python binary, the full path to the script that you wish to execute, and any additional command line arguments. Since all of the Talon utilities require a configuration file be supplied as an argument, this means an additional full path to the config file. You end up with a command that looks like this:
 
 ```shell
-C:\Users\mark\devel\venvs\talon-venv\Scripts\python.exe C:\Users\mark\devel\talon\bin\talon-gui -c C:\Users\mark\devel\talon\etc\talon.ini
+C:/Users/username/devel/venvs/talon-venv/Scripts/python.exe C:/Users/username/devel/talon/bin/talon-gui -c C:/Users/username/devel/talon/etc/talon.ini
 ```
 
 If you're using PowerShell, which is recommended, then you can run a script to turn each command into a short alias:
 
 ```shell
-. C:/Users/mark/devel/talon/bin/CmdFunctions.ps1
+. C:/Users/username/devel/talon/bin/Add-TalonAliases.ps1
 ```
 
 The alias equivalent to the command above is simply:
@@ -92,8 +92,8 @@ talon-gui
 Once the installation is complete, you just need to run the following commands in a new PowerShell window:
 
 ```shell
-& C:/Users/mark/devel/venvs/talon-venv/Scripts/Activate.ps1
-. C:/Users/mark/devel/talon/bin/CmdFunctions.ps1
+& C:/Users/username/devel/venvs/talon-venv/Scripts/Activate.ps1
+. C:/Users/username/devel/talon/bin/Add-TalonAliases.ps1
 ```
 
 # Setup and Configuration
