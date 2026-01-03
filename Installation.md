@@ -97,3 +97,5 @@ Once the installation is complete, you just need to run the following commands i
 ```
 
 # Setup and Configuration
+
+Once installation is complete, you will need to create an INI file for your location.
