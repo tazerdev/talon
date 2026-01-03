@@ -22,7 +22,6 @@ function tmdupdate {
     Invoke-Expression ("$env:VIRTUAL_ENV" + "\Scripts\python.exe" + " " + "$bindir" + "tmdupdate" + " " + "-c $etcdir" + "talon.ini" + " " + $curargs)
 }
 
-
 function trecord {
     $curargs = $args -join " "
     Invoke-Expression ("$env:VIRTUAL_ENV" + "\Scripts\python.exe" + " " + "$bindir" + "trecord" + " " + "-c $etcdir" + "talon.ini" + " " + $curargs)
