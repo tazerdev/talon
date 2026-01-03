@@ -986,128 +986,114 @@ class MyFrame(wx.Frame):
         dlg.Destroy()
 
     def keyhandler_letter_c(self):
-        index = self.dlc1.GetFirstSelected()
-        last = index
+        next = last = cur = self.dlc1.GetFirstSelected()
 
-        while True:
-            if index != -1:
-                for det in self.events:
-                    if det['uid'] == self.detections[index][9]:
-                        if det['disposition'] != 'confirmed':
-                            self.detections[index][10] = 'confirmed'
-                            det['disposition'] = 'confirmed'
-                            det['curated'] = True
-                            self.dirtycache = True
+        while cur != wx.NOT_FOUND:
+            # unselect the current item
+            self.dlc1.Select(cur, False)
 
-                last = index
-                index = self.dlc1.GetNextSelected(index)
-            else:
-                break
+            for det in self.events:
+                if det['uid'] == self.detections[cur][9]:
+                    if det['disposition'] != 'confirmed':
+                        self.dirtycache = True
+                        self.detections[cur][10] = 'confirmed'
+                        det['disposition'] = 'confirmed'
+                        det['curated'] = True
 
-        self.build_detections_list()
-        self.update_detection_status_label()
-        self.dlc1.UpdateListContents(self.detections)
-        self.build_identity_list()
+            last = cur
+
+            # get the next selected item
+            cur = self.dlc1.GetNextSelected(cur)
 
         if not self.show_confirmed_curations:
-            self.dlc1.Select(last)
-            self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+            self.build_detections_list()
+            self.dlc1.UpdateListContents(self.detections)
         else:
-            self.dlc1.Select(last+1)
-            self.dlc1.Focus(self.dlc1.GetNextSelected(last+1))
+            next = last + 1
 
-        if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
-            self.dlc1.Focus(self.dlc1.GetFirstSelected())
+        if next < len(self.detections):
+            self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
+            self.dlc1.Focus(next)
 
     def keyhandler_letter_x(self):
-        # build a list of items to exclude
-        index = self.dlc1.GetFirstSelected()
-        last = index
+        next = last = cur = self.dlc1.GetFirstSelected()
 
-        while True:
-            if index != -1:
-                for det in self.events:
-                    if det['uid'] == self.detections[index][9]:
-                        if det['disposition'] != 'excluded':
-                            self.detections[index][10] = 'excluded'
-                            det['disposition'] = 'excluded'
-                            det['curated'] = True
-                            self.dirtycache = True
+        while cur != wx.NOT_FOUND:
+            # unselect the current item
+            self.dlc1.Select(cur, False)
 
-                last = index
-                index = self.dlc1.GetNextSelected(index)
-            else:
-                break
+            for det in self.events:
+                if det['uid'] == self.detections[cur][9]:
+                    if det['disposition'] != 'excluded':
+                        self.dirtycache = True
+                        self.detections[cur][10] = 'excluded'
+                        det['disposition'] = 'excluded'
+                        det['curated'] = True
 
-        self.build_detections_list()
-        self.update_detection_status_label()
-        self.dlc1.UpdateListContents(self.detections)
-        self.build_identity_list()
+            last = cur
 
-        self.dlc1.SetFocus()
+            # get the next selected item
+            cur = self.dlc1.GetNextSelected(cur)
 
-        # print(self.detections[last][9])
+        # only need to rebuild the list if we're adding/removing items
         if not self.show_excluded_curations:
-            self.dlc1.Select(last)
-            self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+            self.build_detections_list()
+            self.dlc1.UpdateListContents(self.detections)
         else:
-            self.dlc1.Select(last+1)
-            self.dlc1.Focus(self.dlc1.GetNextSelected(last+1))
+            next = last + 1
 
-        if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
-            self.dlc1.Focus(self.dlc1.GetFirstSelected())
+        # 
+        if next < len(self.detections):
+            self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
+            self.dlc1.Focus(next)
 
     def keyhandler_letter_r(self):
         # build a list of items to reset
-        index = self.dlc1.GetFirstSelected()
-        last = index
-        
-        while True:
-            if index != -1:
-                for det in self.events:
-                    if det['uid'] == self.detections[index][9]:
-                        self.dirtycache = True
+        next = last = cur = self.dlc1.GetFirstSelected()
 
-                        det['common_name'] = det['orig_common_name']
-                        self.detections[index][6] = det['orig_common_name']
+        while cur != wx.NOT_FOUND:
+            # unselect the current item
+            self.dlc1.Select(cur, False)
 
-                        det['species_code'] = det['orig_species']
-                        self.detections[index][7] = det['orig_species']
+            for det in self.events:
+                if det['uid'] == self.detections[cur][9]:
+                    self.dirtycache = True
 
-                        det['disposition'] = 'unconfirmed'
-                        self.detections[index][10] = 'unconfirmed'
+                    det['common_name'] = det['orig_common_name']
+                    self.detections[cur][6] = det['orig_common_name']
 
-                        det['engine'] = det['orig_engine']
+                    det['species_code'] = det['orig_species']
+                    self.detections[cur][7] = det['orig_species']
 
-                        # calculate the start time relative to the beginning of the WAV file
-                        mins, secs = divmod(det['orig_start'], 60)
-                        hours, mins = divmod(mins, 60)
-                        start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
+                    det['disposition'] = 'unconfirmed'
+                    self.detections[cur][10] = 'unconfirmed'
 
-                        delta = det['start'] - det['orig_start']
-                        det['dt'] = det['dt'] - timedelta(seconds=float(delta))
+                    det['engine'] = det['orig_engine']
 
-                        det['start'] = det['orig_start']
-                        det['stop'] = det['orig_stop']
-                        det['start_rel'] = start_rel
+                    # calculate the start time relative to the beginning of the WAV file
+                    mins, secs = divmod(det['orig_start'], 60)
+                    hours, mins = divmod(mins, 60)
+                    start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
 
-                        det['curated'] = True
-                        det['overwritewave'] = True
-                        det['overridden'] = False
+                    delta = det['start'] - det['orig_start']
+                    det['dt'] = det['dt'] - timedelta(seconds=float(delta))
 
-                index = self.dlc1.GetNextSelected(index)
-            else:
-                break
+                    det['start'] = det['orig_start']
+                    det['stop'] = det['orig_stop']
+                    det['start_rel'] = start_rel
 
-        self.build_detections_list()
-        self.update_detection_status_label()
-        self.build_identity_list()
-        self.dlc1.UpdateListContents(self.detections)
+                    det['curated'] = True
+                    det['overwritewave'] = True
+                    det['overridden'] = False
 
-        self.dlc1.Select(last+1)
+            last = cur
+            cur = self.dlc1.GetNextSelected(cur)
 
-        if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
-            self.dlc1.Focus(self.dlc1.GetFirstSelected())
+        next = last + 1
+
+        if next < len(self.detections):
+            self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
+            self.dlc1.Focus(next)
 
     def dlc1_KeyHandler(self, event):
         keycode = event.GetKeyCode()
