@@ -901,6 +901,7 @@ class MyFrame(wx.Frame):
     def keyhandler_letter_o(self):
         index = self.dlc1.GetFirstSelected()
         last = index
+
         dlg = override_dialog(self)
         new_species_code = None
 
