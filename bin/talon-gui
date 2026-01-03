@@ -1330,26 +1330,37 @@ class MyFrame(wx.Frame):
             self.specfile = None
             self.image_1 = None
             self.bitmap_1.SetBitmap(wx.Bitmap())
-            
-            while True:
-                event = self.detections[index]
-                event_dt = dt.strptime(f"{event[0]} {event[1]}", '%m/%d/%Y %H:%M:%S%z')
-                imgfile = f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[4]}-{event[7]}.png"
-                wavfile = f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[4]}-{event[7]}.WAV"
 
-                fullpathtoimg = os.path.join(self.cwd, 'clips', imgfile)
-                fullpathtowav = os.path.join(self.cwd, 'clips', wavfile)
+            try:        
+                while True:
+                    event = self.detections[index]
+                    event_dt = dt.strptime(f"{event[0]} {event[1]}", '%m/%d/%Y %H:%M:%S%z')
+                    imgfile = f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[4]}-{event[7]}.png"
+                    wavfile = f"{event_dt.strftime('%Y%m%d-%H%M%S%z')}-{event[4]}-{event[7]}.WAV"
 
-                if os.path.exists(fullpathtoimg):
-                    os.remove(fullpathtoimg)
-                
-                if os.path.exists(fullpathtowav):
-                    os.remove(fullpathtowav)
+                    fullpathtoimg = os.path.join(self.cwd, 'clips', imgfile)
+                    fullpathtowav = os.path.join(self.cwd, 'clips', wavfile)
 
-                index = self.dlc1.GetNextSelected(index)
-                
-                if index == -1:
-                    break
+                    if os.path.exists(fullpathtoimg):
+                        os.remove(fullpathtoimg)
+                    
+                    if os.path.exists(fullpathtowav):
+                        os.remove(fullpathtowav)
+
+                    index = self.dlc1.GetNextSelected(index)
+                    
+                    if index == -1:
+                        break
+            except PermissionError as e:
+                dialog = wx.MessageDialog(
+                    self,
+                    "Permission denied while trying to remove some files. Please fix the permissions and try again.",
+                    "Permission Denied",
+                    wx.OK | wx.ICON_WARNING,
+                )
+
+                dialog.ShowModal()
+                dialog.Destroy()
 
     def toggle_excluded_curations(self, evt):
         if self.show_excluded_curations:
