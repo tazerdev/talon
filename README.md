@@ -14,7 +14,7 @@ At the heart of Talon is a set of metadata required to calculate the absolute da
 
 ## File Naming Convention
 
-Talon will not recognize any file which it hasn't been informed of. This is done through the INI file below. The scheme I use, which I know works, is UID_YYYYMMDD_HHMMSS-ZZZZ.WAV. If you're familiar with how Python parses datetimes from strings, then you have some leeway in how your files are named. The.
+Talon will not recognize any file which it hasn't been informed of via the INI file below. The scheme I use, which I know works, is UID_YYYYMMDD_HHMMSS-ZZZZ.WAV. If you're familiar with how Python parses datetimes from strings, then you have some leeway in how your files are named. The.
 
 ## talon.ini
 
