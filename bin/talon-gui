@@ -1728,9 +1728,9 @@ class MyFrame(wx.Frame):
 
     # TODO: run in a thread because even though it's fast, it's not instant
     def generate_timeseries_graph(self, event=None, frequency=10, title="", y_axis_max=10):
-        if len(self.events) > 0:
-            evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
-        
+        evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
+
+        if len(evts) > 0:
             self.frame_statusbar.SetStatusText(f"Generating time series graph for {len(evts)} results.")
             curpath = os.path.join(self.cwd, "timeseries.png")
 
@@ -2021,7 +2021,6 @@ class duplicate_dialog(wx.Dialog):
         self.spin_ctrl_double_2.Value = det['stop']
 
     def set_taxonomy(self, taxonomy):
-        print(len(taxonomy))
         self.text_ctrl_1.AutoComplete(taxonomy)
 
 class override_dialog(wx.Dialog):
