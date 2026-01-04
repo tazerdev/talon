@@ -819,12 +819,16 @@ class MyFrame(wx.Frame):
 
             curpath, filename = os.path.split(cur.metadata['File Name'])
 
+            # rounding microseconds to seconds is a pain, so for now we'll just truncate
+            # microseconds from the timedelta result
+            duration = str(timedelta(seconds=float(cur.metadata['Duration']))).split('.')[0]
+
             self.audiofiles.append(
                 (
                     filename,
                     cur._timestamp.strftime('%m/%d/%Y'),
                     cur._timestamp.strftime('%H:%M:%S%z'),
-                    f"{cur.metadata['Duration']:0.2f}",
+                    f"{duration}",
                     f"{len(cur.metadata['Events'])}"
                 )
             )
