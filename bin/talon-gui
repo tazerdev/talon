@@ -910,91 +910,101 @@ class MyFrame(wx.Frame):
             dialog.Destroy()
 
     def keyhandler_letter_o(self):
-        index = self.dlc1.GetFirstSelected()
-        last = index
+        item_count = self.dlc1.GetSelectedItemCount()
+        next = last = cur = self.dlc1.GetFirstSelected()
+        
+        if item_count >= 0:
+            dlg = override_dialog(self)
+            dlg.set_taxonomy(list(self.taxonomy.values()))
 
-        dlg = override_dialog(self)
-        new_species_code = None
-
-        if index != -1:
-            for cur in self.events:
-                if cur['uid'] == self.detections[index][9]:
-                    dlg.populate(cur)
-                    dlg.set_taxonomy(list(self.taxonomy.values()))
-
-        if dlg.ShowModal() == wx.ID_OK:
-            new_common_name = dlg.text_ctrl_1.Value
-            new_species_code = [name for name, cn in self.taxonomy.items() if cn == new_common_name]
-
-            # in the event that we receive a common name that's not in the taxonomy list
-            if len(new_species_code) > 0:
-                new_species_code = new_species_code[0]
+            if item_count > 1:
+                dlg.spin_ctrl_double_1.Disable()
+                dlg.spin_ctrl_double_2.Disable()
             else:
-                new_species_code = dlg.text_ctrl_1.Value
+                for evt in self.events:
+                    if evt['uid'] == self.detections[cur][9]:
+                        dlg.populate(evt)
 
-            # new_species_code = dlg.text_ctrl_1.Value
-            new_start = dlg.spin_ctrl_double_1.Value
-            new_stop = dlg.spin_ctrl_double_2.Value
+            if dlg.ShowModal() == wx.ID_OK:
+                new_common_name = dlg.text_ctrl_1.Value
+                new_species_code = [name for name, cn in self.taxonomy.items() if cn == new_common_name]
 
-            for det in self.events:
-                if det['uid'] == self.detections[index][9]:
-                    last = index
-                    self.dirtycache = True
+                # in the event that we receive a common name that's not in the taxonomy list
+                # (e.g., neighbor's dog, Spring Peepers, etc) skip the species code but
+                # still capture the value anyway as we'll use it as the common namea
+                if len(new_species_code) > 0:
+                    new_species_code = new_species_code[0]
+                else:
+                    new_species_code = dlg.text_ctrl_1.Value
 
-                    # curated
-                    self.detections[index][10] = True
-                    det['curated'] = True
+                new_start = dlg.spin_ctrl_double_1.Value
+                new_stop = dlg.spin_ctrl_double_2.Value
 
-                    # overridden
-                    self.detections[index][12] = True
-                    det['overridden'] = True
+                while cur != wx.NOT_FOUND:
+                    # unselect the current item
+                    self.dlc1.Select(cur, False)
 
-                    if new_species_code:
-                        # common_name
-                        self.detections[index][6] = new_common_name
-                        det['common_name'] = new_common_name
+                    for det in self.events:
+                        if det['uid'] == self.detections[cur][9]:
+                            # curated
+                            self.detections[cur][10] = True
+                            det['curated'] = True
 
-                        # species_code
-                        self.detections[index][7] = new_species_code
-                        det['species_code'] = new_species_code
-                    else:
-                        # common_name
-                        self.detections[index][6] = dlg.text_ctrl_1.Value
-                        det['common_name'] = dlg.text_ctrl_1.Value
+                            # overridden
+                            self.detections[cur][12] = True
+                            det['overridden'] = True
+                            det['engine'] = 'ta'
+                            self.detections[cur][4] = 'ta'
 
-                        # species_code
-                        self.detections[index][7] = ''
-                        det['species_code'] = ''
+                            if new_species_code:
+                                # common_name
+                                self.detections[cur][6] = new_common_name
+                                det['common_name'] = new_common_name
 
-                    # calculate the start time relative to the beginning of the WAV file
-                    mins, secs = divmod(new_start, 60)
-                    hours, mins = divmod(mins, 60)
-                    start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
+                                # species_code
+                                self.detections[cur][7] = new_species_code
+                                det['species_code'] = new_species_code
+                            else:
+                                # common_name
+                                self.detections[cur][6] = dlg.text_ctrl_1.Value
+                                det['common_name'] = dlg.text_ctrl_1.Value
 
-                    delta = det['start'] - new_start
-                    det['dt'] = det['dt'] - timedelta(seconds=float(delta))
+                                # species_code
+                                self.detections[cur][7] = ''
+                                det['species_code'] = ''
 
-                    det['start'] = new_start
-                    det['stop'] = new_stop
-                    det['start_rel'] = start_rel
-                    det['engine'] = 'ta'
-                    self.detections[index][4] = 'ta'
+                            # start and stop times aren't relevant if dealing with
+                            # multiple items
+                            if item_count == 1:
+                                # calculate the start time relative to the beginning of the WAV file
+                                mins, secs = divmod(new_start, 60)
+                                hours, mins = divmod(mins, 60)
+                                start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
 
-                    # TODO:
-                    # generate new clipfile and specfile for overridden detection
+                                delta = det['start'] - new_start
+                                det['dt'] = det['dt'] - timedelta(seconds=float(delta))
 
-            self.build_detections_list()
-            self.update_detection_status_label()
-            self.dlc1.UpdateListContents(self.detections)
-            self.build_identity_list()
+                                det['start'] = new_start
+                                det['stop'] = new_stop
+                                det['start_rel'] = start_rel
 
-            self.dlc1.Select(last)
-            self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+                    last = cur
 
-            if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
-                self.dlc1.Focus(self.dlc1.GetFirstSelected())
+                    # get the next selected item
+                    cur = self.dlc1.GetNextSelected(cur)
 
-        dlg.Destroy()
+                self.build_detections_list()
+                self.update_detection_status_label()
+                self.dlc1.UpdateListContents(self.detections)
+                self.build_identity_list()
+
+                self.dlc1.Select(last)
+                self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+
+                if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
+                    self.dlc1.Focus(self.dlc1.GetFirstSelected())
+
+            dlg.Destroy()
 
     def keyhandler_letter_c(self):
         next = last = cur = self.dlc1.GetFirstSelected()
