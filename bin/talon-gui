@@ -1142,7 +1142,7 @@ class MyFrame(wx.Frame):
         x = len([d for d in self.events if d['disposition'] == 'excluded'])
         o = len([d for d in self.events if d['overridden']])
 
-        self.frame_statusbar.SetStatusText(f"{len(self.events)} detections, {len(self.detections)} visible, {c} confirmed, {x} excluded, {o} overridden.")
+        self.frame_statusbar.SetStatusText(f"{len(self.events)} detections ({len(self.events)-len(self.detections)} hidden), {c} confirmed, {x} excluded, {o} overridden.")
 
     def threshold_spn_Change(self, evt):
         self.threshold = self.threshold_spn.GetValue()
