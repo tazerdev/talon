@@ -1020,6 +1020,8 @@ class MyFrame(wx.Frame):
             self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
             self.dlc1.Focus(next)
 
+        self.update_detection_status_label()
+
     def keyhandler_letter_x(self):
         next = last = cur = self.dlc1.GetFirstSelected()
 
@@ -1051,6 +1053,8 @@ class MyFrame(wx.Frame):
         if next < len(self.detections):
             self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
             self.dlc1.Focus(next)
+
+        self.update_detection_status_label()
 
     def keyhandler_letter_r(self):
         # build a list of items to reset
@@ -1102,6 +1106,8 @@ class MyFrame(wx.Frame):
         if next < len(self.detections):
             self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
             self.dlc1.Focus(next)
+
+        self.update_detection_status_label()
 
     def dlc1_KeyHandler(self, event):
         keycode = event.GetKeyCode()
