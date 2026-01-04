@@ -1648,83 +1648,83 @@ class MyFrame(wx.Frame):
             # evts = sorted(self.events, key=lambda d: d['dt'])
             evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
 
-            start_date = dt.combine(evts[0]['dt'].date(), dtt(0,0,0)).replace(microsecond=0)
+            if len(evts) > 0:
+                start_date = dt.combine(evts[0]['dt'].date(), dtt(0,0,0)).replace(microsecond=0)
 
-            ts = talonlib.TalonSchedule(
-                self.latitude,
-                self.longitude,
-                self.timezone,
-                self.section,
-                start_date
-            )
+                ts = talonlib.TalonSchedule(
+                    self.latitude,
+                    self.longitude,
+                    self.timezone,
+                    self.section,
+                    start_date
+                )
 
-            checklists = []
+                checklists = []
 
-            
-            for window in ts:
-                if window['start'] > evts[-1]['dt'].astimezone(curtz):
-                    break
-                else:
-                    curcheck = {}
+                for window in ts:
+                    if window['start'] > evts[-1]['dt'].astimezone(curtz):
+                        break
+                    else:
+                        curcheck = {}
 
-                    curcheck['start'] = window['start'].replace(microsecond=0)
-                    curcheck['stop'] = window['stop'].replace(microsecond=0)
-                    curcheck['protocol'] = window['protocol']
-                    curcheck['species'] = {}
+                        curcheck['start'] = window['start'].replace(microsecond=0)
+                        curcheck['stop'] = window['stop'].replace(microsecond=0)
+                        curcheck['protocol'] = window['protocol']
+                        curcheck['species'] = {}
 
-                    for evt in evts:
-                        if window['start'] <= evt['dt'].astimezone(curtz) < window['stop']:
-                            if evt['disposition'] == 'confirmed':
-                                name = f"{evt['common_name']} ({evt['species_code']})"
+                        for evt in evts:
+                            if window['start'] <= evt['dt'].astimezone(curtz) < window['stop']:
+                                if evt['disposition'] == 'confirmed':
+                                    name = f"{evt['common_name']} ({evt['species_code']})"
 
-                                if name in curcheck['species']:
-                                    curcheck['species'][name] += 1
-                                else:
-                                    curcheck['species'][name] = 1
-                    
-                    checklists.append(curcheck)
+                                    if name in curcheck['species']:
+                                        curcheck['species'][name] += 1
+                                    else:
+                                        curcheck['species'][name] = 1
+                        
+                        checklists.append(curcheck)
 
-            output = ''
-            max = 0
-            i = 0
+                output = ''
+                max = 0
+                i = 0
 
-            for ckl in checklists:
-                if len(ckl['species']) > 0:
-                    max += 1
+                for ckl in checklists:
+                    if len(ckl['species']) > 0:
+                        max += 1
 
-            for ckl in checklists:
-                if len(ckl['species']) > 0:
-                    i += 1
-                    total_individuals = 0
+                for ckl in checklists:
+                    if len(ckl['species']) > 0:
+                        i += 1
+                        total_individuals = 0
 
-                    duration = ckl['stop'] - ckl['start']
+                        duration = ckl['stop'] - ckl['start']
 
-                    for species in ckl['species']:
-                        total_individuals += ckl['species'][species]
+                        for species in ckl['species']:
+                            total_individuals += ckl['species'][species]
 
-                    output += '*' * 42 + '\n'
-                    output += f"* Checklist: {i} of {max}\n"
-                    output += '*' * 42 + '\n'
-                    output += f"Start Time     : {ckl['start']}\n"
-                    output += f"Stop Time      : {ckl['stop']}\n"
-                    output += f"Duration       : {duration}\n"
-                    output += f"Location       : {self.description}\n"
-                    output += f"eBird Protocol : {ckl['protocol']}\n"
-                    # output += f"Total Species  : {len(ckl['species'])}\n"
-                    output += f"Total Calls    : {total_individuals}\n"
-                    output += '-' * 42 + '\n'
+                        output += '*' * 42 + '\n'
+                        output += f"* Checklist: {i} of {max}\n"
+                        output += '*' * 42 + '\n'
+                        output += f"Start Time     : {ckl['start']}\n"
+                        output += f"Stop Time      : {ckl['stop']}\n"
+                        output += f"Duration       : {duration}\n"
+                        output += f"Location       : {self.description}\n"
+                        output += f"eBird Protocol : {ckl['protocol']}\n"
+                        # output += f"Total Species  : {len(ckl['species'])}\n"
+                        output += f"Total Calls    : {total_individuals}\n"
+                        output += '-' * 42 + '\n'
 
-                    # sort species in alphabetical order
-                    spc = sorted(ckl['species'], key=lambda d: d)
+                        # sort species in alphabetical order
+                        spc = sorted(ckl['species'], key=lambda d: d)
 
-                    for species in spc:
-                        output += f"{ckl['species'][species]:>2} - {species}\n"
+                        for species in spc:
+                            output += f"{ckl['species'][species]:>2} - {species}\n"
 
-                    output += '\n\n'
-            
-            self.chklst_txtctrl.Clear()
-            self.chklst_txtctrl.AppendText(output)
-            self.chklst_txtctrl.ShowPosition(0)
+                        output += '\n\n'
+                
+                self.chklst_txtctrl.Clear()
+                self.chklst_txtctrl.AppendText(output)
+                self.chklst_txtctrl.ShowPosition(0)
 
     # TODO: run in a thread because even though it's fast, it's not instant
     def generate_timeseries_graph(self, event=None, frequency=10, title="", y_axis_max=10):
