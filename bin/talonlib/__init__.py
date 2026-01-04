@@ -1156,6 +1156,8 @@ class TalonWeather:
         self._uscs = uscs
         self._cacheexpiry = cacheexpiry
 
+        self._cache_enabled = False
+
         self._curtz = ZoneInfo(self._timezone)
         self._grid_url = f"https://api.weather.gov/points/{self._latitude},{self._longitude}"
 
@@ -1230,84 +1232,86 @@ class TalonWeather:
             raise TalonWeatherTimeoutError(f"Time out reading data from weather.gov: {e}")
 
     def load(self):
-        self._load_obs()
-        self._load_for()
+        self._load_observations()
+        self._load_forecasts()
 
-    def _load_for(self, curdt=None):
-        # fcfile = os.path.join(self._cachedir, 'forecast_data.json')
+    def _load_forecasts(self, curdt=None):
+        if self._cache_enabled:
+            file_list = glob.iglob(os.path.join(self._cachedir, f'F_{self._stationid}_*.json'))
+            new_list = []
 
-        # with open(fcfile, 'r') as f:
-        #     self._forecast = json.load(f)
-        file_list = glob.iglob(os.path.join(self._cachedir, f'F_{self._stationid}_*.json'))
-        new_list = []
+            # get the file name without extension, then split into an array
+            for cachefile in file_list:
+                cur = Path(cachefile).stem
+                new_list.append([cachefile] + cur.split('_')[1:])
 
-        # get the file name without extension, then split into an array
-        for cachefile in file_list:
-            cur = Path(cachefile).stem
-            new_list.append([cachefile] + cur.split('_')[1:])
+            new_list = sorted(new_list, key=lambda x: x[2])
 
-        new_list = sorted(new_list, key=lambda x: x[2])
+            # if we have a cachefile for this stationid, then load the latest
+            # otherwise download a new set of observations
+            if len(new_list) > 0:
+                if curdt:
+                    for cf in new_list:
+                        start = dt.strptime(cf[3], "%Y%m%d-%H%M%S%z")
+                        stop = dt.strptime(cf[4], "%Y%m%d-%H%M%S%z")
 
-        # if we have a cachefile for this stationid, then load the latest
-        # otherwise download a new set of observations
-        if len(new_list) > 0:
-            if curdt:
-                for cf in new_list:
-                    start = dt.strptime(cf[3], "%Y%m%d-%H%M%S%z")
-                    stop = dt.strptime(cf[4], "%Y%m%d-%H%M%S%z")
+                        if stop > curdt > start:
+                            with open(cf[0], 'r') as f:
+                                self._forecast = json.load(f)
 
-                    if stop > curdt > start:
-                        with open(cf[0], 'r') as f:
-                            self._forecast = json.load(f)
-
-                        break
-            else:
-                cachefile = new_list[-1][0]
-                cache_stat = os.stat(cachefile)
-                cache_age = (dt.now().timestamp() - cache_stat.st_mtime) / 60
-
-                if (cache_age >= self._cacheexpiry):
-                    self._get_forecast()
+                            break
                 else:
-                    with open(cachefile, 'r') as f:
-                        self._forecast = json.load(f)
+                    cachefile = new_list[-1][0]
+                    cache_stat = os.stat(cachefile)
+                    cache_age = (dt.now().timestamp() - cache_stat.st_mtime) / 60
+
+                    if (cache_age >= self._cacheexpiry):
+                        self._get_forecast()
+                    else:
+                        with open(cachefile, 'r') as f:
+                            self._forecast = json.load(f)
+            else:
+                self._get_forecast()
         else:
             self._get_forecast()
 
-    def _load_obs(self, curdt=None):
-        file_list = glob.iglob(os.path.join(self._cachedir, f'O_{self._stationid}_*.json'))
-        new_list = []
+    def _load_observations(self, curdt=None):
+        if self._cache_enabled:
+            file_list = glob.iglob(os.path.join(self._cachedir, f'O_{self._stationid}_*.json'))
+            new_list = []
 
-        # get the fine name without extension, then split into an array
-        for cachefile in file_list:
-            cur = Path(cachefile).stem
-            new_list.append([cachefile] + cur.split('_'))
+            # get the fine name without extension, then split into an array
+            for cachefile in file_list:
+                cur = Path(cachefile).stem
+                new_list.append([cachefile] + cur.split('_'))
 
-        new_list = sorted(new_list, key=lambda x: x[2])
+            new_list = sorted(new_list, key=lambda x: x[2])
 
-        # if we have a cachefile for this stationid, then load the latest
-        # otherwise download a new set of observations
-        if len(new_list) > 0:
-            if curdt:
-                for cf in new_list:
-                    start = dt.strptime(cf[3], "%Y%m%d-%H%M%S%z")
-                    stop = dt.strptime(cf[4], "%Y%m%d-%H%M%S%z")
+            # if we have a cachefile for this stationid, then load the latest
+            # otherwise download a new set of observations
+            if len(new_list) > 0:
+                if curdt:
+                    for cf in new_list:
+                        start = dt.strptime(cf[3], "%Y%m%d-%H%M%S%z")
+                        stop = dt.strptime(cf[4], "%Y%m%d-%H%M%S%z")
 
-                    if stop > curdt > start:
-                        with open(cf[0], 'r') as f:
-                            self._observations = json.load(f)
+                        if stop > curdt > start:
+                            with open(cf[0], 'r') as f:
+                                self._observations = json.load(f)
 
-                        break
-            else:
-                cachefile = new_list[-1][0]
-                cache_stat = os.stat(cachefile)
-                cache_age = (dt.now().timestamp() - cache_stat.st_mtime) / 60
-
-                if (cache_age >= self._cacheexpiry):
-                    self._get_observations()
+                            break
                 else:
-                    with open(cachefile, 'r') as f:
-                        self._observations = json.load(f)
+                    cachefile = new_list[-1][0]
+                    cache_stat = os.stat(cachefile)
+                    cache_age = (dt.now().timestamp() - cache_stat.st_mtime) / 60
+
+                    if (cache_age >= self._cacheexpiry):
+                        self._get_observations()
+                    else:
+                        with open(cachefile, 'r') as f:
+                            self._observations = json.load(f)
+            else:
+                self._get_observations()
         else:
             self._get_observations()
 
@@ -1316,8 +1320,6 @@ class TalonWeather:
         self._get_forecast(force)
 
     def _get_forecast(self, force=False):
-        observation_url = None
-
         try:
             # Using NOAA / NWS as a weather source
             # weather.gov data is based on grids (2.5km x 2.5km). the first call gets the grid
@@ -1335,7 +1337,7 @@ class TalonWeather:
                 if forecast_response.ok:
                     self._forecast = forecast_response.json()
                 
-                    if self._forecast is not None:
+                    if self._cache_enabled and self._forecast is not None:
                         self._commit()
                 else:
                     raise TalonWeatherStationError()
@@ -1378,7 +1380,9 @@ class TalonWeather:
 
                     if observation_response.ok:
                         self._observations = observation_response.json()
-                        self._commit()
+
+                        if self._cache_enabled and self._observations is not None:
+                            self._commit()
                     else:
                         raise TalonWeatherObservationError()
                 else:
@@ -1537,9 +1541,6 @@ class TalonWeather:
         return output.strip()
 
     def observation_table(self, samples=12):
-        if not self._observations:
-            self._update(force=True)
-
         output = ""
         i = 1
         max = 0
