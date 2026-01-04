@@ -335,9 +335,11 @@ class MyFrame(wx.Frame):
         
         self.frame_menubar.Append(wxglade_tmp_menu, "File")
         wxglade_tmp_menu = wx.Menu()
-        wxglade_tmp_menu.Append(wx.ID_ANY, "Preferences", "")
-        self.frame_menubar.Append(wxglade_tmp_menu, "Edit")
 
+        self.menu_pref_id = wx.NewIdRef()
+        wxglade_tmp_menu.Append(self.menu_pref_id, "Preferences", "")
+        self.frame_menubar.Append(wxglade_tmp_menu, "Edit")
+        self.frame_menubar.Enable(self.menu_pref_id, False)
         wxglade_tmp_menu = wx.Menu()
 
         self.menu_about_id = wx.ID_ABOUT
