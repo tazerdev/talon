@@ -780,15 +780,19 @@ class MyFrame(wx.Frame):
             dialog.Destroy()
 
         if result == wx.ID_YES:
-            dlg = wx.DirDialog(self, "Choose a directory:", style=wx.DD_DEFAULT_STYLE)
+            dlg = wx.DirDialog(self, "Choose a directory:", style=wx.DD_DEFAULT_STYLE | wx.DD_CHANGE_DIR)
 
             # load selected directory
             if dlg.ShowModal() == wx.ID_OK:
                 self.cwd = dlg.GetPath()
                 self.SetTitle(f"Talon - {self.cwd}")
                 self.initialize()
-                self.alc1.Select(0)
-                self.dlc1.Select(0)
+
+                if len(self.audiofiles) > 0:
+                    self.alc1.Select(0)
+
+                if len(self.detections) > 0:
+                    self.dlc1.Select(0)
             dlg.Destroy()
 
             # load the time series chart if present
