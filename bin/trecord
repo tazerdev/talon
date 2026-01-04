@@ -114,7 +114,7 @@ def ParseCommandLineArguments():
 
     arg_parser.add_argument('-r', '--rate', default=48000, choices=[48000, 44100, 22050], type=int, help='Sampling rate.')
     arg_parser.add_argument('-n', '--channels', default=1, type=int, help='Number of input channels to record.')
-    arg_parser.add_argument('-b', '--bit-depth', default='PCM_32', choices=['PCM_8', 'PCM_16', 'PCM_24', 'PCM_32'], type=str, help='Sound file bit depth.')
+    arg_parser.add_argument('-b', '--bit-depth', default=24, type=int, choices=[8, 16, 24], help='Sound file bit depth.')
     arg_parser.add_argument('-d', '--duration', default=60, type=int, help='Duration of recording in minutes (max 1440, or 24 hours).')
     arg_parser.add_argument('--debug', action='store_true', help='Print extra debugging information.')
     arg_parser.add_argument('-p', '--protocol', default='all', choices=['all', 'day', 'nfc'], type=str, help='Only record these protocols.')
