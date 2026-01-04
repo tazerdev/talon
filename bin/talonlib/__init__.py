@@ -1052,7 +1052,7 @@ class TalonSchedule():
             # the first pass through we are likely dealing with a partial
             # duration, so we need to truncate the initial duration so we
             # align on the expected boundaries (e.g., top of every hour).
-            if self._initial and curdur < self._duration:
+            if self._initial:
                 self._initial = False
 
                 # calculation time remaining in current window
@@ -1071,12 +1071,11 @@ class TalonSchedule():
                 window = (self.Noon - self._start).total_seconds()
                 protocol = "DAY"
 
-                if window % curdur > 0:
-                    curdur = window % curdur
-
-                elif curdur > window:
+                if curdur > window:
                     curdur = window
-
+                else:
+                    curdur = self._duration - (self._start.minute * 60 + self._start.second - self._duration) % self._duration
+                    
             # Noon to Astronomical Dusk
             elif self.Noon <= self._start < self.AstronomicalDuskLocal:
                 window = (self.AstronomicalDuskLocal - self._start).total_seconds()
@@ -1090,9 +1089,10 @@ class TalonSchedule():
                 window = (self._tomorrow - self._start).total_seconds()
                 protocol = "NFC"
 
-                if window % curdur > 0:
-                    curdur = window % curdur
-
+                if curdur > window:
+                    curdur = window
+                else:
+                    curdur = self._duration - (self._start.minute * 60 + self._start.second - self._duration) % self._duration
             else:
                 # we'll never make it here
                 raise StopIteration
@@ -1114,16 +1114,12 @@ class TalonSchedule():
             # if limit is -1 then never stop iterating
             if self._limit >= 0 and (self._start >= self._orig_date + timedelta(hours=self._limit + 1)):
                 raise StopIteration
-            # if self._count >= self._limit:
-            #     raise StopIteration
-            # else:
-            #     if self._limit >= 0:
-            #         self._count += 1
 
             result = {
                 "protocol": protocol,
                 "start": old_start,
-                "stop": self._stop
+                "stop": self._stop,
+                "duration": curdur
             }
 
             return result
