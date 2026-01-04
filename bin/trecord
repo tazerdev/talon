@@ -218,7 +218,9 @@ def main():
                     if i >= 24:
                         break
                     i += 1
-                    print(f"{item['protocol']}  {item['start'].replace(microsecond=0)}  {item['stop'].replace(microsecond=0)}")
+
+                    if args.protocol == 'all' or item['protocol'].lower() in args.protocol:
+                        print(f"{item['protocol']}  {item['start'].replace(microsecond=0)}  {item['stop'].replace(microsecond=0)}  {timedelta(seconds=item['duration'])}")
             else:
                 try:
                     # running query_devices ensures that the device is available before proceeding
