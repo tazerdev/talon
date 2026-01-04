@@ -12,10 +12,6 @@ Please read the [installation document](INSTALL.md) for more details on how to c
 
 At the heart of Talon is a set of metadata required to calculate the absolute date and time of each detection, and the date and times of the Nocturnal Flight Call window (astronomical dusk to astronomical dawn.) This requires, at a minimum, a set of GPS coordinate and a time zone (from which a UTC offset can be determined.) This data is placed in an INI file located in the talon/etc/talon.ini.
 
-## File Naming Convention
-
-Talon will not recognize any file which it hasn't been informed of via the INI file below. The scheme I use, which I know works, is UID_YYYYMMDD_HHMMSS-ZZZZ.WAV. If you're familiar with how Python parses datetimes from strings, then you have some leeway in how your files are named. The.
-
 ## talon.ini
 
 ### General
@@ -86,9 +82,29 @@ ebird_taxonomy = /home/username/talon/var/taxonomy/eBird_taxonomy_v2025.csv
 group_code_xref = /home/username/talon/var/taxonomy/group_code_xref.csv
 ```
 
+### File Naming Convention
+
+Talon will not recognize any file which it hasn't been informed of via the INI file below. The standard file naming scheme (used by Talon and Wildlife Acoustics) uses underscores to seperate fiels:
+
+```code
+UID_YYYYMMDD_HHMMSS.WAV
+```
+
+Where UID is a variable length unique identifier, YYYYMMDD is date with the year (4-digit), month (2-digit, zero-padded), and day (2-digit, zero-padded), and HHMMSS is the 24-hour time. This naming scheme is customized in the location section described below, but can be any recognizable Python datetime scheme.
+
+This example uses a serial number of a device as the UID:
+
+    56371E6A_20260104_122903.WAV
+
+This example is the hostname of my local Raspberry Pi 5, note that it includes the UTC offset:
+
+    RPI1_20240906_050000-0400.WAV
+
+Ultimately, Talon can determine the UTC offset by the time zone listed in the INI file, but including it in the file name isn't a bad idea in the event that you share the file with someone else.
+
 ### Location
 
-Location is used to inform the Talon utils which WAV files it can work with. Specifically
+This section will describe the metadata you wish to associate with files that match the supplied naming scheme. In this example any file that matches 'RPI1_%%Y%%m%%d_%%H%%M%%S%%z.WAV' will have the accompanying metadata associated with it. Without this metadata, Talon doesn't have the latitude and longitude of the recording station and subsequently can't calculate astronomical dawn/dusk to classify detections as the eBird NFC protocol, daytime or nocturnal.
 
 ```ini
 [RPI1]
@@ -106,8 +122,29 @@ serial = f003d4d5d87e439e
 copyright = Mark Montazer
 file_format = RPI1_%%Y%%m%%d_%%H%%M%%S%%z.WAV
 weather_station = KRDU
-ebird_region = US-NC-037
+```
 
+Here's a description of the fields:
+
+* \[UID\] - the text within the brackets is the UID described above.
+* Type - this must be 'station' (lowercase) in order for Talon to know that this is metadata for a location.
+* Name - a useful description of the name associated with related recordings, commonly the eBird hotspot you use when submitting NFC checklists.
+* Note - a note to describe a bit more about the hardware used for recordings at this location.
+* Location - the city and state/province of this location.
+* Elevation - the elevation in feet of this location.
+* Latitude - the latitude, in decimal, of this location.
+* Longitude - the longitude, in decimal, of this location.
+* Timezone - the time zone, as listed in the timezone database of this location. See [Wikipedia entry for Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) for a list.
+* Make / Model / Serial - the make, model, and serial numbmer (if any) of the hardware used to record audio at this locaiton.
+* Copyright - the copyright name you wish associated with recordings from this location.
+* File Format - as described above, the Python datetime format string used to describe audio files for this location.
+* Weather Station - the 4 digit weather.gov station ID for your location weather station. Once you have an INI file created you can use 'tweather --list' to get a list of stations and their distances.
+
+### Location.Audio
+
+This section uses UID.audio to define audio parameters for recording.
+
+```ini
 [RPI1.audio]
 ; run trecord --list to get the device name
 device=Microphone (HD Audio Microphone 2)
@@ -115,3 +152,15 @@ rate=48000
 channels=1
 bits=24
 ```
+
+Here's a description of the fields:
+
+* Device - this is the recording device that will be used by 'trecord', you can get a list of devices by running 'trecord --list'.
+* Rate - a bit rate supported by the recording device.
+* Channels - the number of channels to record, typically 1.
+* Bits - a bit depth supported by the recording device.
+
+## Commands
+
+More detail on the individual commands can be found in the [COMMANDS.md](COMMANDS.md) file.
+
