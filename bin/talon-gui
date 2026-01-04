@@ -628,6 +628,7 @@ class MyFrame(wx.Frame):
         taxonomy = {}
         groupcodexref = {}
         self.files = {}
+        self.detections = []
         self.events = []
 
         if 'general' in self.config and 'species_filter' in self.config['general']:
