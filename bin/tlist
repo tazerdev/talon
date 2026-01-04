@@ -27,6 +27,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-j', '--json', action='store_true', help='Output results in JSON format.')
     arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
     arg_parser.add_argument('-r', '--recurse', action='store_true', help='List files recursively.')
+    arg_parser.add_argument('-e', '--events', action='store_true', help='Get events.')
 
     return arg_parser
 
@@ -109,10 +110,8 @@ def main():
     args = arg_parser.parse_args()
 
     metadata_results = []
-    # file_list = []
-    # file_fmts = []
     find_result = []
-
+    twf = None
     tc = talonlib.TalonConfig(args.config)
     config = tc.config
 
@@ -130,8 +129,12 @@ def main():
                 try:
                     if dt.strptime(str(os.path.basename(filename)), config[section]['file_format']):
                         twf = talonlib.TalonWAVFile(str(filename), section=config[section], taxonomy=[], debug=args.debug)
-                        twf.GetEvents()
-                        metadata_results.append(twf.metadata)
+
+                        if args.events:
+                            twf.GetEvents()
+
+                        if args.json:
+                            metadata_results.append(twf.metadata)
 
                         timezone = get_timezone(twf, config[section], args)
                         start = get_start(twf, timezone, config[section]['file_format'])
