@@ -2233,13 +2233,18 @@ if __name__ == "__main__":
     tc = talonlib.TalonConfig(args.config)
     config = tc.config
 
+    app = wx.App(False)
+
     if 'general' in config and 'icon_path' in config['general']:
         if os.path.exists(config['general']['icon_path']):
             icon_path = config['general']['icon_path']
 
-    app = wx.App(False)
+            favicon = wx.Icon(os.path.join(icon_path, "app.ico"), wx.BITMAP_TYPE_ANY)
+        else:
+            favicon = wx.Icon()
+
     frame = MyFrame(None, "", args.config, icon_path)
     frame.SetTitle(f"Talon - {os.getcwd()}")
-    frame.SetIcon(wx.Icon(os.path.join(icon_path, "app.ico"), wx.BITMAP_TYPE_ANY))
+    frame.SetIcon(favicon)
 
     app.MainLoop()
