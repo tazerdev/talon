@@ -949,6 +949,7 @@ class MyFrame(wx.Frame):
                             # curated
                             self.detections[cur][10] = True
                             det['curated'] = True
+                            self.dirtycache = True
 
                             # overridden
                             self.detections[cur][12] = True
