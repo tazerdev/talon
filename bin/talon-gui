@@ -885,7 +885,7 @@ class MyFrame(wx.Frame):
         self.identity_cbx.SetSelection(0)
 
     def keykandler_letter_a(self):
-        if os.path.exists(self.audacity_path):
+        if self.audacity_path is not None and os.path.exists(self.audacity_path):
             if self.audioclip and os.path.exists(self.audioclip):
                 subprocess.Popen([self.audacity_path, self.audioclip])
             else:
