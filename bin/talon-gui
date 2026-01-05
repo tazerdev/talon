@@ -994,16 +994,18 @@ class MyFrame(wx.Frame):
                     # get the next selected item
                     cur = self.dlc1.GetNextSelected(cur)
 
-                self.build_detections_list()
-                self.update_detection_status_label()
-                self.dlc1.UpdateListContents(self.detections)
-                self.build_identity_list()
+            next = last + 1
 
-                self.dlc1.Select(last)
-                self.dlc1.Focus(self.dlc1.GetNextSelected(last))
+            self.build_detections_list()
+            self.update_detection_status_label()
+            self.dlc1.UpdateListContents(self.detections)
+            self.build_identity_list()
 
-                if not self.dlc1.IsVisible(self.dlc1.GetFirstSelected()):
-                    self.dlc1.Focus(self.dlc1.GetFirstSelected())
+            if next < len(self.detections):
+                self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
+                self.dlc1.Focus(next)
+
+            self.update_detection_status_label()
 
             dlg.Destroy()
 
