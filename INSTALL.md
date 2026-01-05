@@ -73,7 +73,7 @@ Linux:
 
 ```shell
 cd /home/username/talon
-pip install -r ephem guano requests astral sounddevice soundfile wxpython librosa matplotlib
+pip install ephem guano requests astral sounddevice soundfile wxpython librosa matplotlib
 ```
 
 ## Setup Windows Command Aliases
