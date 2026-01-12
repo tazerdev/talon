@@ -65,19 +65,19 @@ def ParseCommandLineArguments():
 def events_worker(twf, events):
     twf.GetEvents()
     # twf.SaveEvents()
-    events += twf.metadata['Events']
+    events += twf.metadata['events']
 
 def twf_worker(filename, section, taxonomy, found_files, startdt=None):
     start = dt.strptime(str(os.path.basename(filename)), section['file_format'])
     curfile = talonlib.TalonWAVFile(filename, section, taxonomy)
 
     if startdt:
-        dur = curfile.metadata['Duration']
+        dur = curfile.metadata['duration']
         stop = start + timedelta(seconds=dur)
-        cur = startdt.astimezone(start.tzinfo)
+        cur = startdt
 
     if not startdt or (start <= cur < stop) or (start > cur):
-        found_files[curfile.metadata['File Name']] = curfile
+        found_files[curfile.metadata['name']] = curfile
 
 def extract_worker(twf, event, graph, force):
     try:
@@ -418,15 +418,15 @@ def main():
                 reader = csv.reader(infile)
                 sfilter = { row[0]:float(row[1]) for row in reader }
 
-    if 'general' in config and 'ebird_taxonomy' in config['general']:
-        if os.path.exists(config['general']['ebird_taxonomy']):
-            with open(config['general']['ebird_taxonomy'], mode='r') as infile:
+    if 'taxonomy' in config and 'ebird_taxonomy' in config['taxonomy']:
+        if os.path.exists(config['taxonomy']['ebird_taxonomy']):
+            with open(config['taxonomy']['ebird_taxonomy'], mode='r') as infile:
                 reader = csv.reader(infile)
                 taxonomy = { row[2]:row[4] for row in reader }
 
-    if 'general' in config and 'group_code_xref' in config['general']:
-        if os.path.exists(config['general']['group_code_xref']):
-            with open(config['general']['group_code_xref'], mode='r') as infile:
+    if 'taxonomy' in config and 'group_code_xref' in config['taxonomy']:
+        if os.path.exists(config['taxonomy']['group_code_xref']):
+            with open(config['taxonomy']['group_code_xref'], mode='r') as infile:
                 reader = csv.reader(infile)
                 groupcodexref = { row[0]:row[1] for row in reader }
 
