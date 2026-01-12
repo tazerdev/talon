@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 
 import os
+import csv
 import sys
+import ephem
+import json
+import guano
 import struct
 import signal
-import talonlib
 import argparse
+from zoneinfo import ZoneInfo
 from datetime import datetime as dt
-
+from datetime import timedelta
+import talonlib
 
 def signal_handler(signum, frame):
     signal.signal(signum, signal.SIG_IGN)
@@ -22,70 +27,6 @@ def ParseCommandLineArguments():
 
     return arg_parser
 
-def extract_channel(twf, infile, channel=0, debug=False, quiet=False):
-        dest_path, filename = os.path.split(infile)
-        filename, extension = os.path.splitext(filename)
-        outfile = os.path.join(dest_path, str(filename) + f"-{channel}" + f"{extension}")
-
-        if not os.path.exists(outfile):
-            header  = struct.pack('4s', b'RIFF')
-            header += struct.pack('<l', twf.metadata['Reported Size'])
-            header += struct.pack('4s', b'WAVE')
-            header += struct.pack('4s', b'fmt ')
-            header += struct.pack('<l', 16)
-            header += struct.pack('<h', twf.metadata['fmt']['Format'])
-            header += struct.pack('<h', 1)
-            header += struct.pack('<l', twf.metadata['fmt']['Frequency'])
-            header += struct.pack('<l', int(twf.metadata['fmt']['Bytes/sec'] / twf.metadata['fmt']['Channels']))
-            header += struct.pack('<h', int(twf.metadata['fmt']['Bytes/blc'] / twf.metadata['fmt']['Channels']))
-            header += struct.pack('<h', twf.metadata['fmt']['Bits/smp'])
-            header += struct.pack('4s', b'data')
-            header += struct.pack('<l', int(twf.metadata['data']['Chunk Size'] / twf.metadata['fmt']['Channels']))
-
-            # bytes per wav block
-            bpb = twf.metadata['fmt']['Bytes/blc']
-
-            # bytes per channel
-            bpc = int(bpb / twf.metadata['fmt']['Channels'])
-
-            # data chunk end
-            dce = twf.metadata['data']['Chunk Size'] + twf.metadata['data']['Offset']
-
-            out_chunk = bytearray()
-
-            # this ensures we have a block size aligned with the WAV data block size
-            BLOCK_SIZE = 65536 * bpb
-
-            if debug:
-                print(f"bpb: {bpb}, bpc: {bpc}, dce: {dce}, BLOCK_SIZE: {BLOCK_SIZE}")
-
-            # TODO: gracefully handle the case where we don't have a WAV file
-            with open(infile, 'rb') as f:
-                with open(outfile, 'wb') as o:
-                    o.write(header)
-                    f.seek(twf.metadata['data']['Offset'])
-
-                    while True:
-                        in_chunk = f.read(BLOCK_SIZE)
-
-                        i = channel * bpc
-
-                        while i < BLOCK_SIZE:
-                            out_chunk += (in_chunk[i:i+bpc])
-                            i += bpb
-
-                        o.write(out_chunk)
-                        out_chunk.clear()
-
-                        if not quiet:
-                            print(f"Splitting channel {channel} from {infile}: {(f.tell() / dce)*100:3.2f}%", end='\r', flush=True)
-
-                        if f.tell() >= dce:
-                            break
-            print()
-        else:
-            print(f"Destination file exists, please remove and try again: {outfile}")
-
 def main():
     arg_parser = ParseCommandLineArguments()
     args = arg_parser.parse_args()
@@ -93,10 +34,13 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     if os.path.exists(args.input):
-        twf = talonlib.TalonWAVFile(args.input)
+        twf = talonlib.TalonWAVFile(args.input, section=None, taxonomy=None, clear=False, debug=args.debug)
+        
+        if args.debug:
+            print(twf)
 
-        if args.channel <= twf.metadata['fmt']['Channels']-1:
-            extract_channel(twf, args.input, args.channel, args.debug, args.quiet)
+        if twf.channels > args.channel:
+            twf.ExtractChannel(args.channel, args.quiet)
         else:
             print(f"Specified channel exceeds number of channels in WAV file.")
     else:
