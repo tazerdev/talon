@@ -417,6 +417,142 @@ class TalonWAVFile:
     def duration(self):
         return self.metadata['chunks']['data']['size'] / self.metadata['chunks']['fmt']['bytes_sec']
 
+    def ExtractChannel(self, channel=0, quiet=False):
+        self._extract_channel(channel, quiet)
+
+    def _extract_channel(self, channel=0, quiet=False):
+        dest_path, filename = os.path.split(self._filename)
+        filename, extension = os.path.splitext(filename)
+        outfile = os.path.join(dest_path, str(filename) + f"-{channel}" + f"{extension}")
+
+        if not os.path.exists(outfile):
+            with open(outfile, 'wb') as o:
+                # python >= 3.7 maintains insertion order for dicts, so we can
+                # rely on ['chunks'] being in the proper order as we loop through
+                for cur in self.metadata['chunks']:
+                    chunk = self.metadata['chunks'][cur]
+
+                    # reinitialize header var for each chunk
+                    header = b''
+
+                    if chunk['name'] == 'RIFF':
+                        header += struct.pack('4s', chunk['name'].encode())
+                        header += struct.pack('<l', chunk['size'])
+                        header += struct.pack('4s', chunk['wavid'].encode())
+
+                        o.write(header)
+                    elif chunk['name'] == 'fmt ':
+                        # TODO: calculate sized based on the data we're packing
+                        header += struct.pack('4s', chunk['name'].encode())
+                        header += struct.pack('<l', chunk['size'])         # 4
+                        header += struct.pack('<H', chunk['format'])       # 2
+                        header += struct.pack('<H', 1)                     # 2
+                        header += struct.pack('<l', chunk['samples_sec'])  # 4
+                        header += struct.pack('<l', int(chunk['bytes_sec']/chunk['channels']))    # 4
+                        header += struct.pack('<H', int(chunk['block_size']/chunk['channels']))   # 2
+                        header += struct.pack('<H', chunk['bit_depth'])    # 2
+
+                        if chunk['ext_size'] > 0:
+                            header += struct.pack('<H', chunk['ext_size'])     # 2
+                            header += struct.pack(f"{len(chunk['ext_data'])}s", chunk['ext_data'])
+
+                        bpb = chunk['block_size']
+                        bpc = int(chunk['bit_depth'] / 8)
+
+                        o.write(header)
+                    elif chunk['name'] == 'data':
+                        # write data chunk name
+                        o.write(struct.pack('4s', chunk['name'].encode()))
+
+                        # write size of 0 for now, we'll update it later
+                        oldpos = o.tell()
+                        o.write(struct.pack('<l', 65536))
+
+                        # BLOCK_SIZE should be evenly divisible by bpb or bpc so that
+                        # when we grab the next chunk we're not starting in the middle
+                        # of block of channels
+                        BLOCK_SIZE = 65536 * bpb * 4
+
+                        # bytes per block
+                        bpb = self.metadata['chunks']['fmt']['block_size']
+
+                        # bytes per channel
+                        bpc = int(self.metadata['chunks']['fmt']['bit_depth'] / 8)
+                        out_chunk = bytearray()
+
+                        with open(self._filename, 'rb') as f:
+                            # offset is the beginning of the data block, the data portion
+                            # follows the 4-byte name and 4-byte size
+                            f.seek(self.metadata['chunks']['data']['offset'] + 8)
+
+                            remaining = chunk['size']
+                            complete = 0
+
+                            while True:
+                                if not quiet:
+                                    print(f"Splitting channel {channel} from {self._filename}: {(complete / chunk['size'])*100:3.2f}%", end='\r', flush=True)
+
+                                if not remaining > 0:
+                                    break
+
+                                if BLOCK_SIZE > remaining:
+                                    BLOCK_SIZE = remaining
+
+                                in_chunk = f.read(BLOCK_SIZE)
+                                i = channel * bpc
+
+                                while i < BLOCK_SIZE:
+                                    out_chunk += (in_chunk[i:i+bpc])
+                                    i += bpb
+
+                                o.write(out_chunk)
+                                out_chunk.clear()
+
+                                remaining -= BLOCK_SIZE
+                                complete += BLOCK_SIZE
+
+                        if not quiet:
+                            print()
+                        
+                        # record current position
+                        curpos = o.tell()
+
+                        # diff between old and cur is data size (-4 because oldpos is before the 4 byte size)
+                        data_size = curpos - oldpos - 4
+
+                        # rewind to old pos and write data size
+                        o.seek(oldpos)
+                        o.write(struct.pack('<l', data_size))
+
+                        # go back to curpos so we can write any
+                        # remaining chunks in the file
+                        o.seek(curpos)
+                    elif chunk['name'] == 'guan':
+                        header += struct.pack('4s', chunk['name'].encode())
+                        data = TalonWAVFile.encode_guano(chunk['data'])
+                        size = len(data)
+                        header += struct.pack('<l', size)
+                        header += struct.pack(f"{len(data)}s", data)
+
+                        o.write(header)
+                    else:
+                        header += struct.pack('4s', chunk['name'].encode())
+                        header += struct.pack('<l', chunk['size'])
+                        header += struct.pack(f"{len(chunk['data'])}s", chunk['data'])
+
+                        o.write(header)
+                
+                # RIFF size is total size of the file minus the 4-by chunk name (RIFF)
+                # and the 4 byte size.
+                riff_size = o.seek(0, 2) - 8
+
+                o.seek(4)
+                o.write(struct.pack('<l', riff_size))
+        else:
+            print(f"Destination file exists, please remove and try again: {outfile}")
+
+    def __str__(self):
+        return json.dumps(self.metadata, indent=4, sort_keys=False, default=self._json_serializer)
 
     def to_dict(self):
         return {
