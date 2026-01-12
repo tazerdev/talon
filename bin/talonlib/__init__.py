@@ -401,6 +401,22 @@ class TalonWAVFile:
         except Exception as e:
             print(f"An error occurred: {e}")
 
+    @property
+    def channels(self):
+        return self.metadata['chunks']['fmt']['channels']
+
+    @property
+    def rate(self):
+        return self.metadata['chunks']['fmt']['rate']
+
+    @property
+    def bits(self):
+        return self.metadata['chunks']['fmt']['bit_depth']
+
+    @property
+    def duration(self):
+        return self.metadata['chunks']['data']['size'] / self.metadata['chunks']['fmt']['bytes_sec']
+
 
     def to_dict(self):
         return {
