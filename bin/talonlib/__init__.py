@@ -293,16 +293,18 @@ class TalonWAVFile:
 
     def _get_chunk(self, fp):
         chunk = []
+        chunk_offset = fp.tell()
         data = fp.read(8)
 
         if len(data) == 8:
             chunk_id = data[0:4].decode()
-            chunk_sz = int.from_bytes(data[4:8], byteorder='little')
+            chunk_sz = chunk_sz_orig = int.from_bytes(data[4:8], byteorder='little')
 
-            # if chunk_sz is odd, then we need to add 1 to account
-            # for the null padding byte
-            chunk_sz += chunk_sz % 2
-            chunk = [ chunk_id, chunk_sz ]
+            # adjust chunk size if chunk size is odd, as there should be a padding byte
+            if chunk_sz % 2 > 0:
+                chunk_sz += chunk_sz % 2
+
+            chunk = [ chunk_id, chunk_sz, chunk_offset, chunk_sz_orig % 2 ]
 
         return chunk
 
