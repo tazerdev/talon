@@ -258,7 +258,7 @@ class TalonListControl(
         self.items = items
 
 class MyFrame(wx.Frame):
-    def __init__(self, parent, title, config, icon_path):
+    def __init__(self, parent, title, config):
         super(MyFrame, self).__init__(parent, title=title, size=(300, 200))
         
         self.cwd = os.getcwd()
@@ -283,7 +283,6 @@ class MyFrame(wx.Frame):
         self.events = []
         self.config_path = config
         self.config = None
-        self.icon_path = icon_path
         self.audacity_path = None
         self.files = {}
         self.sfilter = []
@@ -312,6 +311,38 @@ class MyFrame(wx.Frame):
         # TODO: look into saving the previous working directory somewhere
         # so it can be reopened quicklky
         # self.lastdir = "C:/Users/mark/devel/demo/nextgen/10/20241002"
+
+        # toolbar icons
+        chklsvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.997 4.17a3 3 0 0 1 2.003 2.83v12a3 3 0 0 1 -3 3h-10a3 3 0 0 1 -3 -3v-12a3 3 0 0 1 2.003 -2.83a4 4 0 0 0 3.997 3.83h4a4 4 0 0 0 3.98 -3.597zm-8.987 10.83h-.01a1 1 0 0 0 -.117 1.993l.127 .007a1 1 0 0 0 0 -2m5.99 0h-2a1 1 0 0 0 0 2h2a1 1 0 0 0 0 -2m-5.99 -4h-.01a1 1 0 0 0 -.117 1.993l.127 .007a1 1 0 0 0 0 -2m5.99 0h-2a1 1 0 0 0 0 2h2a1 1 0 0 0 0 -2m-1 -9a2 2 0 1 1 0 4h-4a2 2 0 1 1 0 -4z" />
+            </svg>
+        """
+
+        opensvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" >
+            <path d="M2 6c0 -.796 .316 -1.558 .879 -2.121c.563 -.563 1.325 -.879 2.121 -.879h4l.099 .005c.229 .023 .444 .124 .608 .288l2.707 2.707h6.586c.796 0 1.558 .316 2.121 .879c.319 .319 .559 .703 .707 1.121l-14.523 0c-.407 0 -.805 .125 -1.14 .356c-.292 .203 -.525 .48 -.674 .801l-.058 .141l-1.379 3.676c-.194 .517 .068 1.093 .585 1.287c.517 .194 1.094 -.068 1.288 -.585l1.134 -3.027c.146 -.39 .519 -.649 .937 -.649h13.002l.217 .012c.216 .024 .426 .082 .624 .173c.054 .025 .107 .053 .159 .083c.199 .115 .377 .263 .525 .439c.188 .222 .325 .482 .403 .762c.077 .28 .092 .573 .045 .859c-.001 .008 -.003 .016 -.005 .024l-.995 5.21c-.131 .686 -.497 1.304 -1.036 1.749c-.47 .389 -1.046 .624 -1.65 .677l-.261 .012h-14.026c-.796 0 -1.558 -.316 -2.121 -.879c-.563 -.563 -.879 -1.325 -.879 -2.121v-11z" />
+            </svg>
+        """
+
+        refrsvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" >
+            <path d="M17 3.34a10 10 0 1 1 -14.995 8.984l-.005 -.324l.005 -.324a10 10 0 0 1 14.995 -8.336zm-5 6.66a2 2 0 0 0 -1.977 1.697l-.018 .154l-.005 .149l.005 .15a2 2 0 1 0 1.995 -2.15z" />
+            </svg>
+        """
+
+        timesvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" >
+            <path d="M20 18a1 1 0 0 1 .117 1.993l-.117 .007h-16a1 1 0 0 1 -.117 -1.993l.117 -.007h16z" />
+            <path d="M15.22 5.375a1 1 0 0 1 1.393 -.165l.094 .083l4 4a1 1 0 0 1 .284 .576l.009 .131v5a1 1 0 0 1 -.883 .993l-.117 .007h-16.022l-.11 -.009l-.11 -.02l-.107 -.034l-.105 -.046l-.1 -.059l-.094 -.07l-.06 -.055l-.072 -.082l-.064 -.089l-.054 -.096l-.016 -.035l-.04 -.103l-.027 -.106l-.015 -.108l-.004 -.11l.009 -.11l.019 -.105c.01 -.04 .022 -.077 .035 -.112l.046 -.105l.059 -.1l4 -6a1 1 0 0 1 1.165 -.39l.114 .05l3.277 1.638l3.495 -4.369z" />
+            </svg>
+        """
+
+        weatsvg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="icon icon-tabler icons-tabler-filled icon-tabler-cloud">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.04 4.305c2.195 -.667 4.615 -.224 6.36 1.176c1.386 1.108 2.188 2.686 2.252 4.34l.003 .212l.091 .003c2.3 .107 4.143 1.961 4.25 4.27l.004 .211c0 2.407 -1.885 4.372 -4.255 4.482l-.21 .005h-11.878l-.222 -.008c-2.94 -.11 -5.317 -2.399 -5.43 -5.263l-.005 -.216c0 -2.747 2.08 -5.01 4.784 -5.417l.114 -.016l.07 -.181c.663 -1.62 2.056 -2.906 3.829 -3.518l.244 -.08z" />
+            </svg>
+        """
 
         # ------------------------------------------------------------------------------
         # Menu Bar: Begin
@@ -364,19 +395,19 @@ class MyFrame(wx.Frame):
         # ------------------------------------------------------------------------------
         # Tool Bar: Begin
         # ------------------------------------------------------------------------------
-        of_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "open.svg"))
+        of_svg = wx.svg.SVGimage.CreateFromBytes(opensvg.encode('utf-8'))
         of_bm = of_svg.ConvertToScaledBitmap(wx.Size(32, 32))
 
-        rf_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "refresh.svg"))
+        rf_svg = wx.svg.SVGimage.CreateFromBytes(refrsvg.encode('utf-8'))
         rf_bm = rf_svg.ConvertToScaledBitmap(wx.Size(32, 32))
 
-        ts_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "timeseries.svg"))
+        ts_svg = wx.svg.SVGimage.CreateFromBytes(timesvg.encode('utf-8'))
         ts_bm = ts_svg.ConvertToScaledBitmap(wx.Size(32, 32))
 
-        ck_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "checklist.svg"))
+        ck_svg = wx.svg.SVGimage.CreateFromBytes(chklsvg.encode('utf-8'))
         ck_bm = ck_svg.ConvertToScaledBitmap(wx.Size(32, 32))
 
-        wt_svg = wx.svg.SVGimage.CreateFromFile(os.path.join(self.icon_path, "weather.svg"))
+        wt_svg = wx.svg.SVGimage.CreateFromBytes(weatsvg.encode('utf-8'))
         wt_bm = wt_svg.ConvertToScaledBitmap(wx.Size(32, 32))
 
         self.frame_toolbar = wx.ToolBar(self, -1, style=wx.TB_HORIZONTAL)
@@ -2230,21 +2261,35 @@ if __name__ == "__main__":
     arg_parser = ParseCommandLineArguments()
     args = arg_parser.parse_args()
 
+    svgstr = """
+        <!--
+        unicode: "10011"
+        version: "3.15"
+        -->
+        <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="32"
+        height="32"
+        viewBox="0 0 24 24"
+        fill="black"
+        >
+        <path d="M8 9.585v6.415h6.414l-2.707 2.707a1 1 0 0 1 -.112 .097l-.11 .071l-.114 .054l-.105 .035l-.149 .03l-.117 .006h-4.586l-1.707 1.707a1 1 0 1 1 -1.414 -1.414l1.707 -1.709v-4.584l.003 -.075l.017 -.126l.03 -.111l.044 -.111l.052 -.098l.067 -.096l.08 -.09z" />
+        <path d="M19.414 11l-3 3h-4.914l2.914 -3z" />
+        <path d="M13 4.586v4.998l-3 3v-4.999z" />
+        <path d="M16.482 3a4.515 4.515 0 0 1 4.518 4.514a4.7 4.7 0 0 1 -.239 1.487l-5.761 -.001v-5.76c.469 -.158 .968 -.24 1.482 -.24" />
+        </svg>
+    """
+
+    appsvg = wx.svg.SVGimage.CreateFromBytes(svgstr.encode('utf-8'))
+    appico = wx.Icon(appsvg.ConvertToScaledBitmap(wx.Size(32, 32)))
+
     tc = talonlib.TalonConfig(args.config)
     config = tc.config
 
     app = wx.App(False)
 
-    if 'general' in config and 'icon_path' in config['general']:
-        if os.path.exists(config['general']['icon_path']):
-            icon_path = config['general']['icon_path']
-
-            favicon = wx.Icon(os.path.join(icon_path, "app.ico"), wx.BITMAP_TYPE_ANY)
-        else:
-            favicon = wx.Icon()
-
-    frame = MyFrame(None, "", args.config, icon_path)
+    frame = MyFrame(None, "", args.config)
     frame.SetTitle(f"Talon - {os.getcwd()}")
-    frame.SetIcon(favicon)
+    frame.SetIcon(appico)
 
     app.MainLoop()
