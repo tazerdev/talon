@@ -71,7 +71,7 @@ def isNFC(wav, start, timezone, longitude, latitude):
 
         try:
             curdate = start.date()
-            stop = start + timedelta(seconds=wav.metadata['Duration'])
+            stop = start + timedelta(seconds=wav.metadata['duration'])
             curtz = ZoneInfo(timezone)
 
             location=LocationInfo(name='', region='', timezone=timezone, latitude=latitude, longitude=longitude)
@@ -81,7 +81,7 @@ def isNFC(wav, start, timezone, longitude, latitude):
             if start >= astrodusk or start < astrodawn or stop >= astrodusk or stop < astrodawn:
                 nfc = True
         except KeyError as e:
-            print(f"{wav.metadata['File Name']}: KeyError {e}")
+            print(f"{wav.metadata['name']}: KeyError {e}")
 
         return nfc
 
@@ -131,13 +131,11 @@ def main():
                         twf.metadata['NFC'] = isNFC(twf, start, timezone, longitude, latitude)
 
                         if not args.json:
-                            end = start + timedelta(seconds=twf.metadata['Duration'])
+                            end = start + timedelta(seconds=twf.metadata['duration'])
                             start_str = dt.strftime(start, "%Y-%m-%d %H:%M:%S%z")
                             end_str =  dt.strftime(end, "%Y-%m-%d %H:%M:%S%z")
 
-                            print(f"{twf.metadata['File Name']:24} {twf.metadata['Actual Size']/1024/1024:7.2f} {twf.metadata['Duration']/60:6.2f} {twf.metadata['fmt']['Channels']:2} {twf.metadata['fmt']['Bits/smp']:3} {twf.metadata['fmt']['Frequency']:6}  {start_str}  {end_str}  {int(twf.metadata['NFC'])}")
-                        # else:
-                        #     print(twf)
+                            print(f"{twf.metadata['name']:24} {twf.metadata['st_size']/1024/1024:7.2f} {twf.metadata['duration']/60:6.2f} {twf.metadata['chunks']['fmt']['channels']:2} {twf.metadata['chunks']['fmt']['bit_depth']:3} {twf.metadata['chunks']['fmt']['samples_sec']:6}  {start_str}  {end_str}  {int(twf.metadata['NFC'])}")
                 except ValueError as e:
                     pass
 
