@@ -284,8 +284,8 @@ class TalonWAVFile:
                 self.metadata['section'][key] = section[key]
 
         if os.path.exists(self._filename):
-            self.metadata['Modified Time'] = dt.fromtimestamp(os.stat(self._filename).st_mtime).isoformat()
-            self._read_header()
+            self.metadata['st_mtime'] = dt.fromtimestamp(os.stat(self._filename).st_mtime)
+            self._parse_chunks()
 
     def GetEvents(self):
         self._get_events()
@@ -890,16 +890,11 @@ class TalonWAVFile:
                 # self._guano.write(make_backup=False)
 
     def extract_audio(self, event, clip_len, clipdir, full_height=False, graph=False, force=False, debug=False, silent=False):
-        wavelen = self.metadata['Duration']
         dur_sec = event['stop'] - event['start']
         filename = f"{event['dt'].strftime('%Y%m%d-%H%M%S%z')}-{event['engine']}-{event['species_code']}.WAV"
-        outpath = os.path.join(clipdir, f"{filename}")
-        
-            # print(clip_len)
-            # print(round(clip_len * 4)/4.0)
-            # print(.25 * (clip_len//.25))
-        
-        if not os.path.exists(outpath) or force:
+        outfile = os.path.join(clipdir, f"{filename}")
+
+        if not os.path.exists(outfile):
             if not os.path.exists(clipdir):
                 # race condition with multiprocessing where one 'thread' creates
                 # the dir after another one determines it doesn't exist so, we'll
@@ -935,36 +930,72 @@ class TalonWAVFile:
                 else:
                     start = (start + (dur_sec / 2)) - (clip_len / 2)
 
-            secs_per_byte = 1 / self.metadata['fmt']['Bytes/sec']
-            chunk_size  = int(round(clip_len/secs_per_byte, 0))
-            chunk_start = self.metadata['data']['Offset'] + int(round(start/secs_per_byte, 0))
-            file_size = chunk_size + 44
-
-            # print(f"filename={clipfile}, start={start}, end={start+clip_len}, chunk_start={chunk_start} - {hex(chunk_start)}, chunk_size={chunk_size}")
-
-            # TODO: Ensure all the chunks are properly padded
-            # maybe also add GUANO header
-            header  = struct.pack('4s', b'RIFF')
-            header += struct.pack('<l', file_size)
-            header += struct.pack('4s', b'WAVE')
-            header += struct.pack('4s', b'fmt ')
-            header += struct.pack('<l', 16)
-            header += struct.pack('<h', self.metadata['fmt']['Format'])
-            header += struct.pack('<h', self.metadata['fmt']['Channels'])
-            header += struct.pack('<l', self.metadata['fmt']['Frequency'])
-            header += struct.pack('<l', self.metadata['fmt']['Bytes/sec'])
-            header += struct.pack('<h', self.metadata['fmt']['Bytes/blc'])
-            header += struct.pack('<h', self.metadata['fmt']['Bits/smp'])
-            header += struct.pack('4s', b'data')
-            header += struct.pack('<l', chunk_size)
+            secs_per_byte = 1 / self.metadata['chunks']['fmt']['bytes_sec']
+            clip_size  = int(round(clip_len/secs_per_byte, 0))
+            clip_start = self.metadata['chunks']['data']['offset'] + 8 + int(round(start/secs_per_byte, 0))
 
             with open(self._filename, 'rb') as f:
-                f.seek(chunk_start)
-                data = f.read(chunk_size)
+                f.seek(clip_start)
+                clip_data = f.read(clip_size)
 
-            with open(outpath, 'wb') as f:
-                f.write(header)
-                f.write(data)
+            with open(outfile, 'wb') as o:
+                # python >= 3.7 maintains insertion order for dicts, so we can
+                # rely on ['chunks'] being in the proper order as we loop through
+                for cur in self.metadata['chunks']:
+                    chunk = self.metadata['chunks'][cur]
+
+                    # reinitialize header var for each chunk
+                    header = b''
+
+                    if chunk['name'] == 'RIFF':
+                        header += struct.pack('4s', chunk['name'].encode())
+                        header += struct.pack('<l', chunk['size'])
+                        header += struct.pack('4s', chunk['wavid'].encode())
+
+                        o.write(header)
+                    elif chunk['name'] == 'fmt ':
+                        # TODO: calculate size based on the data we're packing
+                        header += struct.pack('4s', chunk['name'].encode())
+                        header += struct.pack('<l', chunk['size'])
+                        header += struct.pack('<H', chunk['format'])
+                        header += struct.pack('<H', chunk['channels'])
+                        header += struct.pack('<l', chunk['samples_sec'])
+                        header += struct.pack('<l', int(chunk['bytes_sec']/chunk['channels']))
+                        header += struct.pack('<H', int(chunk['block_size']/chunk['channels']))
+                        header += struct.pack('<H', chunk['bit_depth'])
+
+                        if chunk['ext_size'] > 0:
+                            header += struct.pack('<H', chunk['ext_size'])
+                            header += struct.pack(f"{len(chunk['ext_data'])}s", chunk['ext_data'])
+
+                        o.write(header)
+                    elif chunk['name'] == 'data':
+                        # write data chunk name
+                        o.write(struct.pack('4s', chunk['name'].encode()))
+
+                        o.write(struct.pack('<l', clip_size))
+                        o.write(clip_data)
+                    elif chunk['name'] == 'guan':
+                        header += struct.pack('4s', chunk['name'].encode())
+                        data = TalonWAVFile.encode_guano(chunk['data'])
+                        size = len(data)
+                        header += struct.pack('<l', size)
+                        header += struct.pack(f"{len(data)}s", data)
+
+                        o.write(header)
+                    else:
+                        header += struct.pack('4s', chunk['name'].encode())
+                        header += struct.pack('<l', chunk['size'])
+                        header += struct.pack(f"{len(chunk['data'])}s", chunk['data'])
+
+                        o.write(header)
+                
+                # RIFF size is total size of the file minus the 4-by chunk name (RIFF)
+                # and the 4 byte size.
+                riff_size = o.seek(0, 2) - 8
+
+                o.seek(4)
+                o.write(struct.pack('<l', riff_size))
 
         # print(f"{filename}: {graph}")
         if graph:
@@ -985,7 +1016,6 @@ class TalonWAVFile:
             force (bool): Whether or not to overwrite the clip file if it already exists. 
         """
 
-        # wavelen = self.metadata['Duration']
         dur_sec = event['stop'] - event['start']
         filename = f"{event['dt'].strftime('%Y%m%d-%H%M%S%z')}-{event['engine']}-{event['species_code']}.PNG"
         outpath = os.path.join(clipdir, f"{filename}")
@@ -1736,7 +1766,7 @@ class TalonWeather:
         best_obs = None
         output = ""
 
-        if cur_dt:
+        if cur_dt and self._cache_enabled:
             self._load_obs(cur_dt)
 
         newest_dt = dt.fromisoformat(self._observations['features'][0]['properties']['timestamp']).astimezone(self._curtz)
