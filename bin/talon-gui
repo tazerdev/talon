@@ -707,7 +707,7 @@ class MyFrame(wx.Frame):
                         try:
                             self.frame_statusbar.SetStatusText(f"Reading metadata from file {i} of {num_files}")
                             curfile = talonlib.TalonWAVFile(filename, self.config[section], taxonomy)
-                            self.files[curfile.metadata['File Name']] = curfile
+                            self.files[curfile.metadata['name']] = curfile
 
                             self.latitude = self.config[section]['latitude']
                             self.longitude = self.config[section]['longitude']
@@ -721,7 +721,7 @@ class MyFrame(wx.Frame):
 
         for file in self.files:
             self.files[file].GetEvents()
-            self.events += self.files[file].metadata['Events']
+            self.events += self.files[file].metadata['events']
 
         # remove unwanted entries
         self.events = [d for d in self.events if d['common_name'] not in self.sfilter or d['probability'] > self.sfilter[d['common_name']]]
@@ -848,11 +848,11 @@ class MyFrame(wx.Frame):
         for file in self.files:
             cur = self.files[file]
 
-            curpath, filename = os.path.split(cur.metadata['File Name'])
+            curpath, filename = os.path.split(cur.metadata['name'])
 
             # rounding microseconds to seconds is a pain, so for now we'll just truncate
             # microseconds from the timedelta result
-            duration = str(timedelta(seconds=float(cur.metadata['Duration']))).split('.')[0]
+            duration = str(timedelta(seconds=float(cur.metadata['duration']))).split('.')[0]
 
             self.audiofiles.append(
                 (
@@ -860,7 +860,7 @@ class MyFrame(wx.Frame):
                     cur._timestamp.strftime('%m/%d/%Y'),
                     cur._timestamp.strftime('%H:%M:%S%z'),
                     f"{duration}",
-                    f"{len(cur.metadata['Events'])}"
+                    f"{len(cur.metadata['events'])}"
                 )
             )
 
@@ -1254,26 +1254,26 @@ class MyFrame(wx.Frame):
             index = self.audiofiles[cur][0]
             twf = self.files[index]
 
-            self.pg1.SetPropertyValue('name', twf.metadata['Section']['name'])
-            self.pg1.SetPropertyValue('location', twf.metadata['Section']['location'])
-            self.pg1.SetPropertyValue('latitude', twf.metadata['Section']['latitude'])
-            self.pg1.SetPropertyValue('longitude', twf.metadata['Section']['longitude'])
-            self.pg1.SetPropertyValue('elevation', twf.metadata['Section']['elevation'])
-            self.pg1.SetPropertyValue('timezone', twf.metadata['Section']['timezone'])
-            self.pg1.SetPropertyValue('copyright', twf.metadata['Section']['copyright'])
+            self.pg1.SetPropertyValue('name', twf.metadata['section']['name'])
+            self.pg1.SetPropertyValue('location', twf.metadata['section']['location'])
+            self.pg1.SetPropertyValue('latitude', twf.metadata['section']['latitude'])
+            self.pg1.SetPropertyValue('longitude', twf.metadata['section']['longitude'])
+            self.pg1.SetPropertyValue('elevation', twf.metadata['section']['elevation'])
+            self.pg1.SetPropertyValue('timezone', twf.metadata['section']['timezone'])
+            self.pg1.SetPropertyValue('copyright', twf.metadata['section']['copyright'])
 
-            self.pg1.SetPropertyValue('filename', twf.metadata['File Name'])
-            self.pg1.SetPropertyValue('filesize', twf.metadata['Reported Size'])
-            self.pg1.SetPropertyValue('modified', dt.fromisoformat(twf.metadata['Modified Time']).isoformat())
-            self.pg1.SetPropertyValue('duration', twf.metadata['Duration'])
-            self.pg1.SetPropertyValue('sample_rate', twf.metadata['fmt']['Frequency'])
-            self.pg1.SetPropertyValue('channels', twf.metadata['fmt']['Channels'])
-            self.pg1.SetPropertyValue('bit_depth', twf.metadata['fmt']['Bits/smp'])
+            self.pg1.SetPropertyValue('filename', twf.metadata['name'])
+            self.pg1.SetPropertyValue('filesize', twf.metadata['st_size'])
+            self.pg1.SetPropertyValue('modified', twf.metadata['st_mtime'])
+            self.pg1.SetPropertyValue('duration', twf.metadata['duration'])
+            self.pg1.SetPropertyValue('sample_rate', twf.metadata['chunks']['fmt']['samples_sec'])
+            self.pg1.SetPropertyValue('channels', twf.metadata['chunks']['fmt']['channels'])
+            self.pg1.SetPropertyValue('bit_depth', twf.metadata['chunks']['fmt']['bit_depth'])
 
-            self.pg1.SetPropertyValue('make', twf.metadata['Section']['make'])
-            self.pg1.SetPropertyValue('model', twf.metadata['Section']['model'])
-            self.pg1.SetPropertyValue('serial', twf.metadata['Section']['serial'])
-            self.pg1.SetPropertyValue('note', twf.metadata['Section']['note'])
+            self.pg1.SetPropertyValue('make', twf.metadata['section']['make'])
+            self.pg1.SetPropertyValue('model', twf.metadata['section']['model'])
+            self.pg1.SetPropertyValue('serial', twf.metadata['section']['serial'])
+            self.pg1.SetPropertyValue('note', twf.metadata['section']['note'])
 
             nhlen = len([ d for d in self.events if d['engine'] == 'nh' and os.path.basename(d['filename']) == index])
             bnlen = len([ d for d in self.events if d['engine'] == 'bn' and os.path.basename(d['filename']) == index])
