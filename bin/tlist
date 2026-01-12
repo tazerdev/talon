@@ -34,19 +34,7 @@ def ParseCommandLineArguments():
 def get_start(wav, timezone, ff):
     start = ''
     curtz = ZoneInfo(timezone)
-
-    if 'guan' in wav.metadata:
-        # holdover for the previous talcap which was using lowercase field names
-        if 'timestamp' in wav.metadata['guan']:
-            start = dt.fromisoformat(wav.metadata['guan']['timestamp'])
-        else:
-            start = dt.fromisoformat(wav.metadata['guan']['Timestamp'])
-    elif 'bext' in wav.metadata:
-        bext_start = dt.fromisoformat(wav.metadata['bext']['End Time'])
-        start = bext_start.replace(tzinfo=curtz) - timedelta(seconds=wav.metadata['Duration'])
-    else:
-        start = dt.strptime(os.path.basename(wav.metadata['File Name']), ff)
-
+    start = dt.strptime(os.path.basename(wav.metadata['name']), ff)
     start = start.astimezone(ZoneInfo("UTC")).astimezone(curtz)
 
     return start
