@@ -306,7 +306,19 @@ class TalonWAVFile:
 
         return chunk
 
-    def _read_header(self):
+    def _json_serializer(self, obj):
+        # keep datetimes natively in the dict, but auto convert them
+        # to iso formatted datetimes for printing or json dumping
+        if isinstance(obj, (dt)):
+            return obj.isoformat()
+
+        # any byte strings we get from the various chunks will be non-
+        # printable, so convert them to hex in a format similar to xxd
+        if isinstance(obj, (bytes)):
+            return obj.hex(' ', 2)
+
+        raise TypeError ("Type %s not serializable" % type(obj))
+
         try:
             with open(self._filename, 'rb') as f:
                 data = f.read(self.riff_hdr_sz)
