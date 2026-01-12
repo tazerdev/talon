@@ -319,177 +319,86 @@ class TalonWAVFile:
 
         raise TypeError ("Type %s not serializable" % type(obj))
 
+    def _parse_chunks(self):
         try:
             with open(self._filename, 'rb') as f:
-                data = f.read(self.riff_hdr_sz)
+                # this is the order in which chunks were found, so we can 
+                # reconstruct the file in the correct order
+                order = 0
+                self.metadata['st_size'] = 0
+                self.metadata['duration'] = 0
+                self.metadata['chunks'] = {}
+                riff_id, riff_sz, chunk_offset, padding = self._get_chunk(f)
 
-                self.metadata['Actual Size'] = os.stat(self._filename).st_size
-                self.metadata['File Type'] = data[0:4].decode()
-                self.metadata['Reported Size'] = int.from_bytes(data[4:8], byteorder='little') + 8
-                self.metadata['Format'] = data[8:12].decode()
+                if riff_id == 'RIFF':
+                    riff = {}
+                    riff['name'] = riff_id
+                    riff['size'] = riff_sz
+                    riff['offset'] = 0
+                    riff['wavid'] = f.read(4).decode()
+                    riff['order'] = order
 
-                if self.metadata['File Type'] == 'RIFF' and self.metadata['Format'] == 'WAVE':
-                    cur_chunk = self._get_chunk(f)
+                    self.metadata['chunks']['riff'] = riff
+                    # self.metadata['type'] = 'RIFF'
+                    # self.metadata['format'] = 'WAVE'
+                    self.metadata['st_size'] = os.stat(self._filename).st_size
 
-                    while cur_chunk:
-                        if cur_chunk[1] > 0:
-                            if cur_chunk[0] == 'fmt ':
-                                data = f.read(cur_chunk[1])
+                    if riff['wavid'] == 'WAVE':
+                        while True:
+                            order += 1
+                            offset = f.tell()
 
-                                self.metadata['fmt'] = {}
+                            if offset >= self.metadata['st_size']:
+                                break
 
-                                if self._debug:
-                                    self.metadata['fmt']['Chunk Name'] = cur_chunk[0]
-                                    self.metadata['fmt']['Chunk Size'] = cur_chunk[1]
-        
-                                self.metadata['fmt']['Format'] = int.from_bytes(data[0:2], byteorder='little')
-                                self.metadata['fmt']['Channels'] = int.from_bytes(data[2:4], byteorder='little')
-                                self.metadata['fmt']['Frequency'] = int.from_bytes(data[4:8], byteorder='little')
-                                self.metadata['fmt']['Bytes/sec'] = int.from_bytes(data[8:12], byteorder='little')
-                                self.metadata['fmt']['Bytes/blc'] = int.from_bytes(data[12:14], byteorder='little')
-                                self.metadata['fmt']['Bits/smp'] = int.from_bytes(data[14:16], byteorder='little')
-                            elif cur_chunk[0] == 'guan':
-                                data = f.read(cur_chunk[1])
-                                # TODO: create a method to write guano data ourselves, probably
-                                # at the end of the file
-                                self._guano = guano.GuanoFile.from_string(data)
+                            chunk_id, chunk_sz, chunk_offset, padding = self._get_chunk(f)
 
-                                gd = {}
+                            if chunk_id:
+                                chunk = {}
 
-                                # we can read the guano data ourselves now
-                                for item in data.decode().split('\n'):
-                                    if len(item) > 0:
-                                        key, val = item.split(': ')
+                                chunk['name'] = chunk_id
+                                chunk['offset'] = chunk_offset
+                                chunk['size'] = chunk_sz
+                                chunk['padding'] = padding
+                                chunk['order'] = order
 
-                                        # parse namespaces as dicts
-                                        if '|' in key:
-                                            key, subkey = key.split('|')
+                                if chunk_id == 'fmt ':
+                                    data = f.read(chunk_sz)
 
-                                            if key not in gd:
-                                                gd[key] = {}
-                                            
-                                            gd[key][subkey] = val
-                                        else:
-                                            gd[key] = val
+                                    # format 1 is PCM, format 3 is IEEE Float
+                                    chunk['format'] = int.from_bytes(data[0:2], byteorder='little')
+                                    chunk['channels'] = int.from_bytes(data[2:4], byteorder='little')
+                                    chunk['samples_sec'] = int.from_bytes(data[4:8], byteorder='little')
+                                    chunk['bytes_sec'] = int.from_bytes(data[8:12], byteorder='little')
+                                    chunk['block_size'] = int.from_bytes(data[12:14], byteorder='little')
+                                    chunk['bit_depth'] = int.from_bytes(data[14:16], byteorder='little')
 
-                                self.metadata['guan'] = gd
-                            elif cur_chunk[0] == 'data':
-                                # don't need to read the entire data chunk into memory
-                                # as it may be very large, just record the size and
-                                # skip to the next chunk
-                                offset = f.tell()
-                                f.seek(cur_chunk[1], 1)
+                                    ext_size = int.from_bytes(data[16:18], byteorder='little')
+                                    chunk['ext_size'] = ext_size
+                                    chunk['ext_data'] = data[18:18+ext_size] #.hex(' ', 2)
+                                elif chunk_id == 'guan':
+                                    data = f.read(chunk_sz)
 
-                                self.metadata['data'] = {}
-                                self.metadata['data']['Offset'] = offset
+                                    chunk['data'] = TalonWAVFile.decode_guano(data)
+                                    chunk['offset'] = chunk_offset
+                                    chunk['size'] = chunk_sz
+                                elif chunk_id == 'data':
+                                    # don't need to read the entire data chunk into memory as it may be very large, 
+                                    # just record the size and skip to the next chunk
+                                    f.seek(chunk_sz, 1)
+                                else:
+                                    chunk['data'] = f.read(chunk_sz)
 
-                                if self._debug:
-                                    self.metadata['data']['Chunk Name'] = cur_chunk[0]
-    
-                                self.metadata['data']['Chunk Size'] = cur_chunk[1]
-                            elif cur_chunk[0] == 'bext':
-                                data = f.read(cur_chunk[1])
-
-                                bext_date = data[320:330].decode()
-                                bext_time = data[330:338].decode()
-                                # self.bext_start = dt.fromisoformat(f'{bext_date} {bext_time}')
-
-                                self.metadata['bext'] = {}
-
-                                if self._debug:
-                                    self.metadata['bext']['Chunk Name'] = cur_chunk[0]
-                                    self.metadata['bext']['Chunk Size'] = cur_chunk[1]
-        
-                                self.metadata['bext']['Originator'] = data[256:287].decode().split('\x00')[0]
-                                self.metadata['bext']['Originator Date'] = data[320:330].decode().split('\x00')[0]
-                                self.metadata['bext']['Originator Time'] = data[330:338].decode().split('\x00')[0]
-                                self.metadata['bext']['End Time'] = f'{bext_date} {bext_time}'
-                            elif cur_chunk[0] == 'cue ':
-                                data = f.read(cur_chunk[1])
-
-                                self.metadata['cue'] = {}
-
-                                if self._debug:
-                                    self.metadata['cue ']['Chunk Name'] = cur_chunk[0]
-                                    self.metadata['cue ']['Chunk Size'] = cur_chunk[1]
-                            elif cur_chunk[0] == 'LIST':
-                                data = f.read(cur_chunk[1])
-                                fp = 0
-
-                                self.metadata['LIST'] = {}
-
-                                if self._debug:
-                                    self.metadata['LIST']['Chunk Name'] = cur_chunk[0]
-                                    self.metadata['LIST']['Chunk Size'] = cur_chunk[1]
-                                
-                                if data[fp:fp+4].decode() == 'INFO':
-                                    self.metadata['LIST']['INFO'] = {}
-                                    fp += 4
-
-                                    while fp < cur_chunk[1]:
-
-                                        cur_name = data[fp:fp+4].decode()
-                                        cur_size = int.from_bytes(data[fp+4:fp+8], byteorder='little')
-                                        cur_data = data[fp+8:fp+8+cur_size].decode()
-
-                                        self.metadata['LIST']['INFO'][cur_name] = {}
-
-                                        if self._debug:
-                                            self.metadata['LIST']['INFO'][cur_name]['Chunk Name'] = cur_name
-                                            self.metadata['LIST']['INFO'][cur_name]['Chunk Size'] = cur_size
-        
-                                        self.metadata['LIST']['INFO'][cur_name]['Chunk Data'] = cur_data.split('\x00')[0]
-
-                                        fp += cur_size + 8
-                            elif cur_chunk[0] == 'wamd':
-                                data = f.read(cur_chunk[1])
-
-                                self.metadata['wamd'] = {}
-
-                                if self._debug:
-                                    self.metadata['wamd']['Chunk Name'] = cur_chunk[0]
-                                    self.metadata['wamd']['Chunk Size'] = cur_chunk[1]
-                            elif cur_chunk[0] == 'id3 ':
-                                data = f.read(cur_chunk[1])
-
-                                self.metadata['id3'] = {}
-                                
-                                if self._debug:
-                                    self.metadata['id3']['Chunk Name'] = cur_chunk[0]
-                                    self.metadata['id3']['Chunk Size'] = cur_chunk[1]
-                            elif cur_chunk[0] == 'iXML ':
-                                data = f.read(cur_chunk[1])
-
-                                self.metadata['iXML'] = {}
-
-                                if self._debug:
-                                    self.metadata['iXML']['Chunk Name'] = cur_chunk[0]
-                                    self.metadata['iXML']['Chunk Size'] = cur_chunk[1]
+                                self.metadata['chunks'][chunk['name'].strip()] = chunk
                             else:
-                                f.seek(cur_chunk[1], 1)
-
-                            cur_chunk = self._get_chunk(f)
-                        else:
-                            print(f'Warning {cur_chunk[0]} chunk with a size of 0 detected in {self.metadata["File Name"]}')
-
-                            # TODO: Handle this better as cur_chunk[0] may be binary data and thus unsafe
-                            self.metadata[cur_chunk[0]] = {}
-                            self.metadata[cur_chunk[0]]['Chunk Size'] = cur_chunk[1]
-                            break
-
-                self.metadata['Duration'] = self.metadata['data']['Chunk Size'] / self.metadata['fmt']['Bytes/sec']
+                                break
+                else:
+                    print('Not a WAV file.')
         except FileNotFoundError:
             print(f"Error: File '{self._filename}' not found.")
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def __str__(self):
-        events = self.metadata['Events']
-
-        for event in events:
-            event['dt'] = event['dt'].isoformat()
-
-        return json.dumps(self.metadata, indent=4, sort_keys=True)
 
     def to_dict(self):
         return {
