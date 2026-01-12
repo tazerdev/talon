@@ -1,6 +1,5 @@
-$etcdir = [string](Get-Item $PSScriptRoot).Parent + "\etc\"
+$etcdir = [string](Get-Item $PSScriptRoot).Parent + "\"
 $bindir = [string](Get-Item $PSScriptRoot).Parent + "\bin\"
-
 
 function talon {
     $curargs = $args -join " "
