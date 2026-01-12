@@ -260,17 +260,19 @@ class TalonGuanoFile:
         
         return output.strip()
 
+
 class TalonWAVFile:
     def __init__(self, filename, section=None, taxonomy=None, clear=False, debug=False):
         self.metadata = {}
         self._filename = filename
         self._section = section
+        self.metadata['section'] = {}
+        self.metadata['name'] = os.path.basename(self._filename)
+        self.metadata['events'] = []
+
         self._taxonomy = taxonomy
-        self.metadata['Section'] = {}
-        self.metadata['File Name'] = os.path.basename(self._filename)
-        self.metadata['Events'] = []
+
         self._guano = None
-        self.riff_hdr_sz = 12
         self._debug = debug
 
         if self._section:
@@ -279,7 +281,7 @@ class TalonWAVFile:
             self._timestamp.astimezone(self._curtz)
 
             for key in section:
-                self.metadata['Section'][key] = section[key]
+                self.metadata['section'][key] = section[key]
 
         if os.path.exists(self._filename):
             self.metadata['Modified Time'] = dt.fromtimestamp(os.stat(self._filename).st_mtime).isoformat()
@@ -616,7 +618,7 @@ class TalonWAVFile:
 
         important_dates = {}
 
-        for event in self.metadata['Events']:
+        for event in self.metadata['events']:
             curdate = event['dt'].date()
             eventtime = event['dt']
 
@@ -643,7 +645,7 @@ class TalonWAVFile:
             event['station'] = self._section.name
             # self.metadata['Events'] = sorted(self.metadata['Events'], key=lambda d: d['dt'])
 
-        self.metadata['Events'] = sorted(self.metadata['Events'], key=lambda d: d['dt'])
+        self.metadata['events'] = sorted(self.metadata['events'], key=lambda d: d['dt'])
 
     def _get_nh_events(self, nh_file):
         if os.path.exists(nh_file):
@@ -666,7 +668,7 @@ class TalonWAVFile:
                         else:
                             common_name = det['predicted_category']
 
-                        self.metadata['Events'].append(
+                        self.metadata['events'].append(
                             { 
                                 'filename': str(self._filename),
                                 'dt': abstime,
@@ -719,7 +721,7 @@ class TalonWAVFile:
                         else:
                             common_name = det['Common Name']
 
-                        self.metadata['Events'].append(
+                        self.metadata['events'].append(
                             {
                                 'filename': str(self._filename),
                                 'dt': abstime,
@@ -775,7 +777,7 @@ class TalonWAVFile:
                                 common_name = det['common_name']
 
                             # iterate all events and remove any that are overridden by the user
-                            for event in self.metadata['Events']:
+                            for event in self.metadata['events']:
                                 if det_orig_start == event['start'] and det_orig_stop == event['stop'] and det['orig_engine'] == event['engine'] and det['orig_species'] == event['species_code']:
                                     # print(f"{det_orig_start}={event['start']}, {det_orig_stop}={event['stop']}, {det['orig_engine']}={event['engine']}, {det['orig_species']}={event['species_code']}, {common_name}")
 
@@ -815,10 +817,10 @@ class TalonWAVFile:
                                     'curated': True
                             }
 
-                            self.metadata['Events'].append(cur)
+                            self.metadata['events'].append(cur)
 
                 for item in remove_list:
-                    self.metadata['Events'].remove(item)
+                    self.metadata['events'].remove(item)
             except TypeError as e:
                 print(f"TypeError: {e}")
             except KeyError as e:
@@ -834,7 +836,7 @@ class TalonWAVFile:
         # ta_fields = [ 'filename', 'dt', 'probability', 'species_code', 'engine', 'start', 'start_rel', 'stop', 'common_name', 'disposition', 'orig_dt', 'orig_species_code', 'orig_engine', 'orig_station' ]
 
         ta_fields = [ 'filename', 'dt', 'probability', 'species_code', 'engine', 'start', 'start_rel', 'stop', 'common_name', 'disposition', 'orig_dt', 'orig_species_code', 'orig_engine', 'orig_station' ]
-        events = [d for d in self.metadata['Events'] if d['engine'] in [ 'nh' ]]
+        events = [d for d in self.metadata['events'] if d['engine'] in [ 'nh' ]]
 
         print(events)
 
@@ -924,10 +926,10 @@ class TalonWAVFile:
                 # the end even though it means it won't be centered
                 if start < padding:
                     start = 0
-                # clip occurs at teh end of the file, add padding to the
+                # clip occurs at the end of the file, add padding to the
                 # beginning even though it means it won't be centered
-                elif (wavelen - event['stop']) < padding:
-                    start = wavelen - clip_len
+                elif (self.duration - event['stop']) < padding:
+                    start = self.duration - clip_len
                 # clip occurs in the middle of the file somewhere, just
                 # try to center it.
                 else:
