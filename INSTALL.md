@@ -82,7 +82,7 @@ pip install ephem guano requests astral sounddevice soundfile wxpython librosa m
 The typical way to execute a Python script, under Windows, is to provide the full path to the Python binary, the full path to the script that you wish to execute, and any additional command line arguments. Since all of the Talon utilities require a configuration file be supplied as an argument, this means an additional full path to the config file. You end up with a command that looks like this:
 
 ```shell
-C:/Users/username/devel/venvs/talon-venv/Scripts/python.exe C:/Users/username/devel/talon/bin/talon-gui -c C:/Users/username/devel/talon/etc/talon.ini
+C:/Users/username/devel/venvs/talon-venv/Scripts/python.exe C:/Users/username/devel/talon/bin/talon-gui -c C:/Users/username/devel/talon/talon.ini
 ```
 
 If you're using PowerShell, recommended if using Windows, then you can run a script to turn each command into a short alias:

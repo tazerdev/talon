@@ -10,7 +10,7 @@ Please read the [installation document](INSTALL.md) for more details on how to c
 
 ## Configuration
 
-At the heart of Talon is a set of metadata required to calculate the absolute date and time of each detection, and the date and times of the Nocturnal Flight Call window (astronomical dusk to astronomical dawn.) This requires, at a minimum, a set of GPS coordinate and a time zone (from which a UTC offset can be determined.) This data is placed in an INI file located in the talon/etc/talon.ini.
+At the heart of Talon is a set of metadata required to calculate the absolute date and time of each detection, and the date and times of the Nocturnal Flight Call window (astronomical dusk to astronomical dawn.) This requires, at a minimum, a set of GPS coordinate and a time zone (from which a UTC offset can be determined.) This data is placed in an INI file located in the talon/talon.ini.
 
 ## talon.ini
 
@@ -30,10 +30,6 @@ species_filter = C:/users/username/talon/var/filter.csv
 
 # Path to the Audacity binary on your local system
 audacity_path = C:/Program Files/Audacity/audacity.exe
-
-# Icons used by the app itself:
-# https://github.com/tabler/tabler-icons
-icon_path = C:/users/username/talon/var/icons
 ```
 
 And general section under Linux will look like this:
@@ -50,10 +46,6 @@ species_filter = /home/username/talon/var/filter.csv
 
 # Path to the Audacity binary on your local system
 audacity_path = /usr/sbin/audacity
-
-# Icons used by the app itself:
-# https://github.com/tabler/tabler-icons
-icon_path = /home/username/talon/var/icons
 ```
 
 ### Taxonomy
@@ -65,10 +57,10 @@ Windows:
 ```ini
 [taxonomy]
 # eBird Taxonomy can be acquired from https://...
-ebird_taxonomy = C:/users/username/talon/var/taxonomy/eBird_taxonomy_v2025.csv
+ebird_taxonomy = C:/users/username/talon/taxonomy/eBird_taxonomy_v2025.csv
 
 # Groupcodes utized by Nighthawk, but cross-referenced to the neares eBird 'spuh'
-group_code_xref = C:/users/username/talon/var/taxonomy/group_code_xref.csv
+group_code_xref = C:/users/username/talon/taxonomy/group_code_xref.csv
 ```
 
 Linux:
@@ -76,10 +68,10 @@ Linux:
 ```ini
 [taxonomy]
 # eBird Taxonomy can be acquired from https://...
-ebird_taxonomy = /home/username/talon/var/taxonomy/eBird_taxonomy_v2025.csv
+ebird_taxonomy = /home/username/talon/taxonomy/eBird_taxonomy_v2025.csv
 
 # Groupcodes utized by Nighthawk, but cross-referenced to the neares eBird 'spuh'
-group_code_xref = /home/username/talon/var/taxonomy/group_code_xref.csv
+group_code_xref = /home/username/talon/taxonomy/group_code_xref.csv
 ```
 
 ### File Naming Convention
