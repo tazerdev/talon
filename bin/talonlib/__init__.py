@@ -559,6 +559,41 @@ class TalonWAVFile:
             "File name": self.file_name
         }
 
+    @staticmethod
+    def encode_guano(data):
+        output = ""
+
+        for key in data:
+            if not isinstance(data[key], dict):
+                output += f"{key}: {data[key]}\n"
+            else:
+                for k in data[key]:
+                    output += f"{key}|{k}: {data[key][k]}\n"
+
+        return output.encode()
+
+    @staticmethod
+    def decode_guano(data):
+        tmp = {}
+
+        # we can read the guano data ourselves now
+        for item in data.decode().split('\n'):
+            if len(item) > 0:
+                key, val = item.split(': ')
+
+                # parse namespaces as dicts
+                if '|' in key:
+                    key, subkey = key.split('|')
+
+                    if key not in tmp:
+                        tmp[key] = {}
+                    
+                    tmp[key][subkey] = val
+                else:
+                    tmp[key] = val
+
+        return tmp
+
     def _get_events(self, force=False):
         nh_ext = '_detections.csv'
         bn_ext ='.BirdNET.selection.table.txt'
