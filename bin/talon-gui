@@ -1653,7 +1653,7 @@ class MyFrame(wx.Frame):
                 debug=False,
                 stationid=stationid,
                 uscs=True,
-                cachedir=self.config['general']['cachedir']
+                cachedir=None
             )
 
             forecast = tw.forecast_table(24)
