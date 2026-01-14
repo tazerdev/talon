@@ -85,11 +85,19 @@ def isNFC(wav, start, timezone, longitude, latitude):
 
         return nfc
 
-def json_dt_serialize(obj):
-    if isinstance(obj, (dt, datetime.date)):
+def _json_serializer(obj):
+    # keep datetimes natively in the dict, but auto convert them
+    # to iso formatted datetimes for printing or json dumping
+    if isinstance(obj, (dt)):
         return obj.isoformat()
 
-    raise TypeError(f"Type {type(obj)} not serializable")
+    # any byte strings we get from the various chunks will be non-
+    # printable, so convert them to hex in a format similar to xxd
+    if isinstance(obj, (bytes)):
+        return obj.hex(' ', 2)
+
+    raise TypeError ("Type %s not serializable" % type(obj))
+
 
 def main():
     signal.signal(signal.SIGINT, signal_handler)
@@ -140,7 +148,7 @@ def main():
                     pass
 
     if args.json:
-        print(json.dumps(metadata_results, default=json_dt_serialize, indent=4, sort_keys=True))
+        print(json.dumps(metadata_results, default=_json_serializer, indent=4, sort_keys=True))
 
 if __name__ == "__main__":
     sys.exit(main())
