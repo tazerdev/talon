@@ -473,7 +473,7 @@ class TalonWAVFile:
                         # BLOCK_SIZE should be evenly divisible by bpb or bpc so that
                         # when we grab the next chunk we're not starting in the middle
                         # of block of channels
-                        BLOCK_SIZE = 65536 * bpb * 4
+                        BLOCK_SIZE = 65536 * bpb
 
                         # bytes per block
                         bpb = self.metadata['chunks']['fmt']['block_size']
