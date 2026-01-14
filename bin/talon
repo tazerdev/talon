@@ -593,7 +593,8 @@ def main():
     
         p.join()
     else:
-        print(output.strip())
+        if len(output) > 0:
+            print(output.strip())
 
 
 if __name__ == "__main__":
