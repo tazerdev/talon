@@ -154,16 +154,19 @@ def main():
             name = dev['name'].replace('\r\n','')
             print(f"[{dev['index']:2d}] {dev['default_samplerate']:9.2f} {dev['max_input_channels']:4d}   {name}")
     else:
-        if os.path.exists(args.config):
-            tc = talonlib.TalonConfig(args.config)
-            config = tc.config
+        if not os.path.exists(args.config):
+            print(f"Configuration file not found: {args.config}, exiting.")
+            sys.exit(-1)
 
-            if not args.location:
-                section = config['general']['default']
-            else:
-                section = args.location
-                
-            sec_audio = f"{section}.audio"
+        tc = talonlib.TalonConfig(args.config)
+        config = tc.config
+
+        if not args.location:
+            section = config['general']['default']
+        else:
+            section = args.location
+            
+        sec_audio = f"{section}.audio"
 
         # allow the user to override the recording device on the commandline
         if args.device:

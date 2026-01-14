@@ -385,6 +385,10 @@ def main():
     arg_parser = ParseCommandLineArguments()
     args = arg_parser.parse_args()
 
+    if not os.path.exists(args.config):
+        print(f"Configuration file not found: {args.config}, exiting.")
+        sys.exit(-1)
+
     tc = talonlib.TalonConfig(args.config)
     config = tc.config
 

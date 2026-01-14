@@ -32,6 +32,10 @@ def main():
     arg_parser = ParseCommandLineArguments()
     args, curfile = arg_parser.parse_known_args()
 
+    if not os.path.exists(args.config):
+        print(f"Configuration file not found: {args.config}, exiting.")
+        sys.exit(-1)
+
     if curfile:
         curfile = curfile[0]
 
