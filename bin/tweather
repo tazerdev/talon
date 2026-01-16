@@ -58,8 +58,6 @@ def main():
 
     if section in config and 'weather_station' in config[section]:
         stationid = config[section]['weather_station']
-    else:
-        stationid = None
 
     if section in config:
         tw = talonlib.TalonWeather(config[section]['latitude'], config[section]['longitude'], config[section]['timezone'], debug=args.debug, stationid=stationid, uscs=args.si, cachedir=config['general']['cachedir'])
