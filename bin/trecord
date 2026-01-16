@@ -3,7 +3,7 @@
 import os
 import sys
 import time
-import json
+# import json
 import queue
 import signal
 import argparse
@@ -22,7 +22,6 @@ def signal_handler(signum, frame):
 
    # ensure the recording thread gets alerted that we need to stop
     tev.set()
-    time.sleep(1)
     record_post(vals.copy())
 
     sys.exit(0)
@@ -64,36 +63,6 @@ def record(callback):
                     break
 
 def record_post(metadata):
-    """
-    Writes metadata to WAV file after the recording is finished.
-    """
-    try:
-        if debug:
-            print(f"[{dt.now()}] record_post(): Begin record_post() for {metadata['wave']}")
-
-        if section in config and config[section]['type'] == 'station':
-            if debug:
-                print(f"[{dt.now()}] record_post(): Instantiating GUANO class for {metadata['wave']}")
-
-            tgf = talonlib.TalonGuanoFile(metadata['wave'], config, clear=True)
-
-            if debug:
-                print(f"[{dt.now()}] record_post(): Writing GUANO data to {metadata['wave']}")
-
-            tgf.write()
-
-            if debug:
-                print(f"[{dt.now()}] record_post(): Done writing GUANO data to {metadata['wave']}")
-
-            # we're done, remove the lock
-            if os.path.exists(metadata['json']):
-                if debug:
-                    print(f"[{dt.now()}] record_post(): Removing {metadata['json']}")
-
-                os.remove(metadata['json'])
-    except Exception as e:
-        print(f"Exception caught: {e}")
-
     # we're done, remove the lock
     if os.path.exists(metadata['wave'] + '.LCK'):
         if debug:
@@ -185,17 +154,8 @@ def main():
         }
 
         if section in config and config[section]['type'] == 'station':
-            # TODO: We should implement this, also we should implement NFC only recording
-            # if args.start:
-            #     curdate = args.start.astimezone(ZoneInfo(config[section]['timezone']))
-            # else:
-            curdate = dt.now()
-
-            # if args.days:
-            #     hours = args.days * 24
-            # else:
             # TODO: reimplement args.days, or some limiting factor, so we can end recording
-            # otherwise, we'll record infinitely
+            # otherwise, we'll record infinitely, which may be fine.
             hours = -1
             
             ts = talonlib.TalonSchedule(
@@ -203,7 +163,7 @@ def main():
                 config[section]['longitude'],
                 config[section]['timezone'],
                 config[section]['name'],
-                curdate,
+                dt.now(),
                 hours,
                 args.duration * 60,
                 args.debug
@@ -220,6 +180,7 @@ def main():
 
                     if i >= 24:
                         break
+
                     i += 1
 
                     if args.protocol == 'all' or item['protocol'].lower() in args.protocol:
@@ -238,7 +199,6 @@ def main():
                             # setup our recording and json file names
                             curname = f"{section}_{item['start'].strftime('%Y%m%d_%H%M%S%z')}"
                             vals['wave'] = curname + '.WAV'
-                            vals['json'] = curname + '.json'
 
                             if debug:
                                 print(f"[{dt.now()}] main(): Recording data from {vals['device']} to {vals['wave']}")
@@ -246,12 +206,6 @@ def main():
                                 print(f"[{dt.now()}] main(): Start    : {item['start']}")
                                 print(f"[{dt.now()}] main(): Stop     : {item['stop']}")
                                 print(f"[{dt.now()}] main(): Duration : {item['stop'] - item['start']}")
-
-                            # write metadata to file before recording in case we lose power
-                            # or the process is killed in an unfriendly manner. we can then
-                            # commit the metadata using another tool like talon or tls
-                            with open(vals['json'], 'w') as f:
-                                json.dump(vals, f, indent=4, sort_keys=True, default=str)
 
                             # create a lock file so the other apps know not to touch the WAV file.
                             with open(vals['wave'] + '.LCK', 'w') as f:
