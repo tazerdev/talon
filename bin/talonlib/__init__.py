@@ -175,13 +175,14 @@ class TalonGuanoFile:
         # We're assuming the name is underscore separated and
         # that the first field matches a section in the config
         self.station = self.filename.split('_')[0]
+        self.statmd = f"{self.station}.metadata"
 
         # if the first field doesn't match, then raise a custom exception
         if self.station in self.config:
             self.timestamp = dt.strptime(str(self.filename), self.config[self.station]['file_format'])
             
-            if 'NFC|Time Zone' in self.config[self.station]:
-                self.tz = ZoneInfo(self.config[self.station]['NFC|Time Zone'])
+            if 'timezone' in self.config[self.station]:
+                self.tz = ZoneInfo(self.config[self.station]['timezone'])
                 self.timestamp.astimezone(self.tz)
         else:
             raise TalonConfigError(f"Section not found in config file: {self.station}")
@@ -205,19 +206,40 @@ class TalonGuanoFile:
                 del(self.gf[key])
 
         if len(self.gf.to_string()) == 0:
-            self.gf['Loc Elevation'] = self.config[self.station]['elevation']
-            self.gf['Loc Position'] = (float(self.config[self.station]['latitude']), float(self.config[self.station]['longitude']))
-            self.gf['Make'] = self.config[self.station]['Make']
-            self.gf['Model'] = self.config[self.station]['Model']
-            self.gf['Serial'] = self.config[self.station]['Serial']
             self.gf['Original Filename'] = self.filename
-            self.gf['Note'] = self.config[self.station]['note']
-            self.gf['Timestamp'] = self.timestamp
             self.gf['NFC|Moon Phase'] = ephem.Moon(self.timestamp).moon_phase
-            self.gf['NFC|Station Name'] = self.config[self.station]['name']
-            self.gf['NFC|Time Zone'] = self.config[self.station]['timezone']
-            self.gf['NFC|Copyright'] = self.config[self.station]['copyright']
-            self.gf['NFC|Location'] = self.config[self.station]['location']
+            self.gf['Timestamp'] = self.timestamp
+
+            if self.statmd:
+                if 'elevation' in self.config[self.statmd]:
+                    self.gf['Loc Elevation'] = self.config[self.statmd]['elevation']
+
+                if 'latitude' in self.config[self.station] and 'longitude' in self.config[self.station]:
+                    self.gf['Loc Position'] = (float(self.config[self.station]['latitude']), float(self.config[self.station]['longitude']))
+
+                if 'make' in self.config[self.statmd]:
+                    self.gf['Make'] = self.config[self.statmd]['make']
+
+                if 'model' in self.config[self.statmd]:
+                    self.gf['Model'] = self.config[self.statmd]['model']
+
+                if 'serial' in self.config[self.statmd]:
+                    self.gf['Serial'] = self.config[self.statmd]['serial']
+
+                if 'note' in self.config[self.statmd]:
+                    self.gf['Note'] = self.config[self.statmd]['note']
+
+                if 'name' in self.config[self.statmd]:
+                    self.gf['NFC|Station Name'] = self.config[self.statmd]['name']
+
+                if 'timezone' in self.config[self.statmd]:
+                    self.gf['NFC|Time Zone'] = self.config[self.statmd]['timezone']
+
+                if 'copyright' in self.config[self.statmd]:
+                    self.gf['NFC|Copyright'] = self.config[self.statmd]['copyright']
+
+                if 'location' in self.config[self.statmd]:
+                    self.gf['NFC|Location'] = self.config[self.statmd]['location']
 
     def write(self):
         self.gf.write(make_backup=False)

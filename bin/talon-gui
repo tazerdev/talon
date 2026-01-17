@@ -665,23 +665,29 @@ class MyFrame(wx.Frame):
         self.detections = []
         self.events = []
 
-        if 'general' in self.config and 'species_filter' in self.config['general']:
-            # load common names and group code cross-reference
-            if os.path.exists(self.config['general']['species_filter']):
-                with open(self.config['general']['species_filter'], mode='r', encoding="utf-8") as infile:
-                    reader = csv.reader(infile)
-                    self.sfilter = { row[0]:float(row[1]) for row in reader }
+        # get the parent directory of the bin dir
+        talon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        fpath = os.path.join(talon_dir, 'filter.csv')
 
-        if 'taxonomy' in self.config and 'ebird_taxonomy' in self.config['taxonomy']:
-            # load common names and group code cross-reference
-            if os.path.exists(self.config['taxonomy']['ebird_taxonomy']):
-                with open(self.config['taxonomy']['ebird_taxonomy'], mode='r', encoding="utf-8") as infile:
+        # load the species filter, taxonomy, and group code xref
+        if os.path.exists(fpath):
+            with open(fpath, mode='r') as infile:
+                reader = csv.reader(infile)
+                sfilter = { row[0]:float(row[1]) for row in reader }
+
+        if 'taxonomy' in config and 'ebird_taxonomy' in config['taxonomy']:
+            epath = os.path.join(talon_dir, config['taxonomy']['ebird_taxonomy'])
+
+            if os.path.exists(epath):
+                with open(epath, mode='r') as infile:
                     reader = csv.reader(infile)
                     taxonomy = { row[2]:row[4] for row in reader }
 
-        if 'taxonomy' in self.config and 'group_code_xref' in self.config['taxonomy']:
-            if os.path.exists(self.config['taxonomy']['group_code_xref']):
-                with open(self.config['taxonomy']['group_code_xref'], mode='r', encoding="utf-8") as infile:
+        if 'taxonomy' in config and 'group_code_xref' in config['taxonomy']:
+            gpath = os.path.join(talon_dir, config['taxonomy']['group_code_xref'])
+
+            if os.path.exists(gpath):
+                with open(gpath, mode='r') as infile:
                     reader = csv.reader(infile)
                     groupcodexref = { row[0]:row[1] for row in reader }
 
@@ -714,7 +720,13 @@ class MyFrame(wx.Frame):
                             self.longitude = self.config[section]['longitude']
                             self.timezone = self.config[section]['timezone']
                             self.section = section
-                            self.description = self.config[section]['name']
+
+                            self.statmd = f"{section}.metadata"
+
+                            if self.statmd in self.config and 'name' in self.config[section]:
+                                self.description = self.config[self.statmd]['name']
+                            else:
+                                self.description = f"{float(self.config[section]['latitude']):5.8f}, {float(self.config[section]['longitude']):5.8f}"
 
                             i += 1
                         except ValueError as e:
@@ -726,7 +738,6 @@ class MyFrame(wx.Frame):
 
         # remove unwanted entries
         self.events = [d for d in self.events if d['common_name'] not in self.sfilter or d['probability'] > self.sfilter[d['common_name']]]
-
 
         self.build_audiofiles_list()
         self.alc1.UpdateListContents(self.audiofiles)
@@ -1255,13 +1266,34 @@ class MyFrame(wx.Frame):
             index = self.audiofiles[cur][0]
             twf = self.files[index]
 
-            self.pg1.SetPropertyValue('name', twf.metadata['section']['name'])
-            self.pg1.SetPropertyValue('location', twf.metadata['section']['location'])
+            if self.statmd in self.config:
+                if 'elevation' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('elevation', self.config[self.statmd]['elevation'])
+
+                if 'make' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('make', self.config[self.statmd]['make'])
+
+                if 'model' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('model', self.config[self.statmd]['model'])
+
+                if 'serial' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('serial', self.config[self.statmd]['serial'])
+
+                if 'note' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('note', self.config[self.statmd]['note'])
+
+                if 'name' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('name', self.config[self.statmd]['name'])
+
+                if 'copyright' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('copyright', self.config[self.statmd]['copyright'])
+
+                if 'location' in self.config[self.statmd]:
+                    self.pg1.SetPropertyValue('location', self.config[self.statmd]['location'])
+
             self.pg1.SetPropertyValue('latitude', twf.metadata['section']['latitude'])
             self.pg1.SetPropertyValue('longitude', twf.metadata['section']['longitude'])
-            self.pg1.SetPropertyValue('elevation', twf.metadata['section']['elevation'])
             self.pg1.SetPropertyValue('timezone', twf.metadata['section']['timezone'])
-            self.pg1.SetPropertyValue('copyright', twf.metadata['section']['copyright'])
 
             self.pg1.SetPropertyValue('filename', twf.metadata['name'])
             self.pg1.SetPropertyValue('filesize', twf.metadata['st_size'])
@@ -1270,11 +1302,6 @@ class MyFrame(wx.Frame):
             self.pg1.SetPropertyValue('sample_rate', twf.metadata['chunks']['fmt']['samples_sec'])
             self.pg1.SetPropertyValue('channels', twf.metadata['chunks']['fmt']['channels'])
             self.pg1.SetPropertyValue('bit_depth', twf.metadata['chunks']['fmt']['bit_depth'])
-
-            self.pg1.SetPropertyValue('make', twf.metadata['section']['make'])
-            self.pg1.SetPropertyValue('model', twf.metadata['section']['model'])
-            self.pg1.SetPropertyValue('serial', twf.metadata['section']['serial'])
-            self.pg1.SetPropertyValue('note', twf.metadata['section']['note'])
 
             nhlen = len([ d for d in self.events if d['engine'] == 'nh' and os.path.basename(d['filename']) == index])
             bnlen = len([ d for d in self.events if d['engine'] == 'bn' and os.path.basename(d['filename']) == index])

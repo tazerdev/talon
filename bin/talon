@@ -291,7 +291,7 @@ def generate_timeseries_graph(events: list, frequency=5, ymax=None):
     plt.savefig('timeseries.png', pad_inches=0.5, bbox_inches='tight')
     plt.close()
 
-def generate_checklists(section, events):
+def generate_checklists(config, section, events):
     # TODO: Warning, there's the risk of getting the dates/times wrong
     # as we're blindly casing the datetimes of the events as the time
     # zone supplied in the section. For now it's up to the user to not
@@ -299,14 +299,21 @@ def generate_checklists(section, events):
 
     # start at midnight of the date of the first event, just so we
     # are sure our checklist windows are full hours
-    curtz = ZoneInfo(section['timezone'])
+    curtz = ZoneInfo(config[section]['timezone'])
     start_date = dt.combine(events[0]['dt'].date(), dtt(0,0,0)).replace(microsecond=0)
+    
+    statmd = f"{section}.metadata"
+
+    if statmd in config and 'name' in config[statmd]:
+        location = config[statmd]['name']
+    else:
+        location = f"{float(config[section]['latitude']):5.8f}, {float(config[section]['longitude']):5.8f}"
 
     ts = talonlib.TalonSchedule(
-        section['latitude'],
-        section['longitude'],
-        section['timezone'],
-        section['name'],
+        config[section]['latitude'],
+        config[section]['longitude'],
+        config[section]['timezone'],
+        location,
         start_date
     )
 
@@ -358,7 +365,7 @@ def generate_checklists(section, events):
             output += f"Start Time     : {ckl['start']}\n"
             output += f"Stop Time      : {ckl['stop']}\n"
             output += f"Duration       : {duration}\n"
-            output += f"Location       : {section['name']}\n"
+            output += f"Location       : {location}\n"
             output += f"eBird Protocol : {ckl['protocol']}\n"
             # output += f"Total Species  : {len(ckl['species'])}\n"
             output += f"Total Calls    : {total_individuals}\n"
@@ -415,22 +422,29 @@ def main():
         add_detection(args.add_detection, found_files)
         sys.exit(0)
 
+    # get the parent directory of the bin dir
+    talon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fpath = os.path.join(talon_dir, 'filter.csv')
+
     # load the species filter, taxonomy, and group code xref
-    if 'general' in config and 'species_filter' in config['general']:
-        if os.path.exists(config['general']['species_filter']):
-            with open(config['general']['species_filter'], mode='r') as infile:
-                reader = csv.reader(infile)
-                sfilter = { row[0]:float(row[1]) for row in reader }
+    if os.path.exists(fpath):
+        with open(fpath, mode='r') as infile:
+            reader = csv.reader(infile)
+            sfilter = { row[0]:float(row[1]) for row in reader }
 
     if 'taxonomy' in config and 'ebird_taxonomy' in config['taxonomy']:
-        if os.path.exists(config['taxonomy']['ebird_taxonomy']):
-            with open(config['taxonomy']['ebird_taxonomy'], mode='r') as infile:
+        epath = os.path.join(talon_dir, config['taxonomy']['ebird_taxonomy'])
+
+        if os.path.exists(epath):
+            with open(epath, mode='r') as infile:
                 reader = csv.reader(infile)
                 taxonomy = { row[2]:row[4] for row in reader }
 
     if 'taxonomy' in config and 'group_code_xref' in config['taxonomy']:
-        if os.path.exists(config['taxonomy']['group_code_xref']):
-            with open(config['taxonomy']['group_code_xref'], mode='r') as infile:
+        gpath = os.path.join(talon_dir, config['taxonomy']['group_code_xref'])
+
+        if os.path.exists(gpath):
+            with open(gpath, mode='r') as infile:
                 reader = csv.reader(infile)
                 groupcodexref = { row[0]:row[1] for row in reader }
 
@@ -570,7 +584,7 @@ def main():
             section = args.location
 
         if events:
-            output = generate_checklists(config[section], events)
+            output = generate_checklists(config, last_section, events)
         else:
             output = "No events to add to a checklist."
 
