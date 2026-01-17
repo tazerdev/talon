@@ -72,7 +72,7 @@ pip install -r ./requirements.txt
 Linux (you will need to install some system dependencies before you can pip install the necessary Python modules):
 
 ```shell
-/usr/bijdnf install gtk3 gtk3-devel python3-devel freeglut-devel mesa-libGLU-devel mesa-libGL-devel gstreamer1-plugins-base-devel
+/usr/bin/dnf install gtk3 gtk3-devel python3-devel freeglut-devel mesa-libGLU-devel mesa-libGL-devel gstreamer1-plugins-base-devel
 cd /home/username/talon
 pip install ephem guano requests astral sounddevice soundfile wxpython librosa matplotlib
 ```
