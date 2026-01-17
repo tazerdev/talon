@@ -63,8 +63,6 @@ class Talon:
 
         # create the frequency buckets before we iterate events
         if frequency > 0:
-            # print(f"(({stop_dt} - {start_dt}).total_seconds() / 60) / {frequency}")
-            # print((stop_dt - start_dt).total_seconds())
             start = start_dt.replace(minute=0, second=0, microsecond=0)
             stop = stop_dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1, minutes=frequency)
 
@@ -85,9 +83,6 @@ class Talon:
                 tmp = start + interval
 
                 for event in evts:
-                    # if DEBUG:
-                    #     print(f"({event['dt']} >= {start})={event['dt'] >= start} and ){event['dt']} < {tmp})={event['dt'] < tmp}")
-
                     if event['dt'] >= start and event['dt'] < tmp:
                         totals[i] += 1
 
@@ -96,13 +91,6 @@ class Talon:
             # add datetime labels
             for bucket in buckets:
                 labels.append(bucket)
-                # print(bucket)
-
-            # if DEBUG:
-            #     print(f"numbuckets: {numbuckets}, interval: {interval}")
-
-            #     for i in range(0, numbuckets):
-            #         print(labels[i], totals[i])
 
         for i in range(numbuckets):
             # handle averaging the starting and ending buckets by making them 0
@@ -228,12 +216,6 @@ class TalonGuanoFile:
             self.gf['NFC|Moon Phase'] = ephem.Moon(self.timestamp).moon_phase
             self.gf['NFC|Station Name'] = self.config[self.station]['name']
             self.gf['NFC|Time Zone'] = self.config[self.station]['timezone']
-            # self.gf['NFC|Temperature'] = 'NA'
-            # self.gf['NFC|Humidity'] = 'NA'
-            # self.gf['NFC|Wind Direction'] = 'NA'
-            # self.gf['NFC|Wind Speed'] = 'NA'
-            # self.gf['NFC|Pressure'] = 'NA'
-            # self.gf['NFC|Visibility'] = 'NA'
             self.gf['NFC|Copyright'] = self.config[self.station]['copyright']
             self.gf['NFC|Location'] = self.config[self.station]['location']
 
@@ -605,13 +587,9 @@ class TalonWAVFile:
         nh_file = os.path.join(dest_path, str(filename) + nh_ext)
         ta_file = os.path.join(dest_path, str(filename) + ta_ext)
 
-        # print(len(self.metadata['Events']))
         self._get_nh_events(nh_file)
-        # print(len(self.metadata['Events']))
         self._get_bn_events(bn_file)
-        # print(len(self.metadata['Events']))
         self._get_ta_events(ta_file)
-        # print(len(self.metadata['Events']))
 
         important_dates = {}
 
@@ -640,7 +618,6 @@ class TalonWAVFile:
                 event['protocol'] = "day"
 
             event['station'] = self._section.name
-            # self.metadata['Events'] = sorted(self.metadata['Events'], key=lambda d: d['dt'])
 
         self.metadata['events'] = sorted(self.metadata['events'], key=lambda d: d['dt'])
 
@@ -776,14 +753,7 @@ class TalonWAVFile:
                             # iterate all events and remove any that are overridden by the user
                             for event in self.metadata['events']:
                                 if det_orig_start == event['start'] and det_orig_stop == event['stop'] and det['orig_engine'] == event['engine'] and det['orig_species'] == event['species_code']:
-                                    # print(f"{det_orig_start}={event['start']}, {det_orig_stop}={event['stop']}, {det['orig_engine']}={event['engine']}, {det['orig_species']}={event['species_code']}, {common_name}")
-
-                                    # print(len(self.metadata['Events']))
                                     remove_list.append(event)
-                                    # self.metadata['Events'].remove(event)
-                                    # print(len(self.metadata['Events']))
-
-
                             
                             if det['overridden'] == 'True':
                                 engine = 'ta'
@@ -830,8 +800,6 @@ class TalonWAVFile:
         filename, extension = os.path.splitext(filename)
         ta_file = os.path.join(dest_path, str(filename) + '_talon.csv')
 
-        # ta_fields = [ 'filename', 'dt', 'probability', 'species_code', 'engine', 'start', 'start_rel', 'stop', 'common_name', 'disposition', 'orig_dt', 'orig_species_code', 'orig_engine', 'orig_station' ]
-
         ta_fields = [ 'filename', 'dt', 'probability', 'species_code', 'engine', 'start', 'start_rel', 'stop', 'common_name', 'disposition', 'orig_dt', 'orig_species_code', 'orig_engine', 'orig_station' ]
         events = [d for d in self.metadata['events'] if d['engine'] in [ 'nh' ]]
 
@@ -870,12 +838,6 @@ class TalonWAVFile:
             self._guano['NFC|Moon Phase'] = ephem.Moon(self._timestamp).moon_phase
             self._guano['NFC|Station Name'] = self._section['name']
             self._guano['NFC|Time Zone'] = self._section['timezone']
-            # self._guano['NFC|Temperature'] = 'NA'
-            # self._guano['NFC|Humidity'] = 'NA'
-            # self._guano['NFC|Wind Direction'] = 'NA'
-            # self._guano['NFC|Wind Speed'] = 'NA'
-            # self._guano['NFC|Pressure'] = 'NA'
-            # self._guano['NFC|Visibility'] = 'NA'
             self._guano['NFC|Copyright'] = self._section['copyright']
             self._guano['NFC|Location'] = self._section['location']
 
@@ -884,7 +846,6 @@ class TalonWAVFile:
 
             if write:
                 pass
-                # self._guano.write(make_backup=False)
 
     def extract_audio(self, event, clip_len, clipdir, full_height=False, graph=False, force=False, debug=False, silent=False):
         dur_sec = event['stop'] - event['start']
@@ -994,7 +955,6 @@ class TalonWAVFile:
                 o.seek(4)
                 o.write(struct.pack('<l', riff_size))
 
-        # print(f"{filename}: {graph}")
         if graph:
             self._generate_graph(event, filename, clipdir, full_height, force, debug, silent)
 
@@ -1149,8 +1109,6 @@ class TalonSchedule():
         self.MidnightLocal = dt.combine(self._date, time(0,0,0)).astimezone(self._curtz).replace(microsecond=0)
 
         self.Midnight = self.MidnightLocal.astimezone(self._utc).replace(microsecond=0)
-
-        # print(self._orig_date + timedelta(hours=self._limit):)
 
     def __str__(self):
         output = ""
@@ -1537,7 +1495,6 @@ class TalonWeather:
         start = dt.strftime(first_dt, "%Y%m%d-%H%M%S%z")
         stop = dt.strftime(last_dt, "%Y%m%d-%H%M%S%z")
         stationid = self._observations['features'][0]['properties']['stationId']
-        # cachefile = os.path.join(self._cachedir, f"{stationid}_{start}_{stop}.json")
 
         obs_cachefile = os.path.join(self._cachedir, f"O_{stationid}_{start}_{stop}.json")
 
@@ -1607,9 +1564,6 @@ class TalonWeather:
             if obs['visibility']['unitCode'] == 'wmoUnit:m':
                 if self._uscs:
                     self._visibility = round(self._visibility / 1609.344, 2)
-            # else:
-            #     if not self._uscs:
-            # unknown what other unit it might be, miles, feet, etc.
 
         self._humidity = obs['relativeHumidity']['value']
 
@@ -1661,14 +1615,10 @@ class TalonWeather:
                 if len(tmp) > max:
                     max = len(tmp)
 
-                # output += tmp
-
                 if i >= samples:
                     break
                 else:
                     i += 1
-
-        # output = 'Hourly Forecast\n' + '-' * (max - 1) + '\n' + output
 
         for fc in fcitems[::-1]:
             output += fc
@@ -1683,7 +1633,6 @@ class TalonWeather:
 
         data = ""
         station = f"Weather Station: {self._observations['features'][0]['properties']['stationName']}\n"
-        # output += '-' * 106 + '\n'
 
         for obs in self._observations['features']:
             cond_len = len(obs['properties']['textDescription'])
@@ -1752,9 +1701,6 @@ class TalonWeather:
             else:
                 i += 1
 
-        # output  = station
-        # output += 'Current Conditions\n'
-        # output += '-' * (max - 1) + '\n'
         output += data
 
         return output.strip()
@@ -1772,7 +1718,6 @@ class TalonWeather:
         if now:
             cur_dt = newest_dt
 
-        # print(f"{newest_dt} >= {cur_dt} >= {oldest_dt} = {newest_dt >= cur_dt >= oldest_dt}")
         if newest_dt >= cur_dt >= oldest_dt:
             timestamps = []
 
