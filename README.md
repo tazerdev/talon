@@ -16,17 +16,13 @@ At the heart of Talon is a set of metadata required to calculate the absolute da
 
 ### General
 
-The general section is used to inform the various talon utilities. A general section under Windows will look like this:
+The general section is used to inform the various talon utilities of details for various location. Several utilities will fall back to the default option when the location isn't specified on the command line. The utilities which work with WAV files will always attempt to use the UID in the file name to pull relevant data.
+
+A general section under Windows will look like this:
 
 ```ini
 [general]
 default = RPI1
-cachedir = C:/users/username/talon/var/cache
-
-# To hide detections for a given species which are under the
-# supplied threshold, add them to filter.csv in a CSV format:
-# Eastern Screech-Owl,.5
-species_filter = C:/users/username/talon/var/filter.csv
 
 # Path to the Audacity binary on your local system
 audacity_path = C:/Program Files/Audacity/audacity.exe
@@ -37,12 +33,6 @@ And general section under Linux will look like this:
 ```ini
 [general]
 default = RPI1
-cachedir = /home/username/talon/var/cache
-
-# To hide detections for a given species which are under the
-# supplied threshold, add them to filter.csv in a CSV format:
-# Eastern Screech-Owl,.5
-species_filter = /home/username/talon/var/filter.csv
 
 # Path to the Audacity binary on your local system
 audacity_path = /usr/sbin/audacity
@@ -50,28 +40,17 @@ audacity_path = /usr/sbin/audacity
 
 ### Taxonomy
 
-This is used to convert BirdNet and Nighthawk detections to common names. It's also the source behind the search box which allows you to override a detection. The group code cross-reference is a list of Nighthawk group codes and their nearest corresponding eBird taxonomy (e.g., 'spuh'):
+This is used to convert BirdNet and Nighthawk detections to common names. It's also the source behind the search box which allows you to override a detection. The group code cross-reference is a list of Nighthawk group codes and their nearest corresponding eBird taxonomy (e.g., 'spuh'). The paths to these files are relative to the talon directory. It's best to leave these options alone.
 
-Windows:
-
-```ini
-[taxonomy]
-# eBird Taxonomy can be acquired from https://...
-ebird_taxonomy = C:/users/username/talon/taxonomy/eBird_taxonomy_v2025.csv
-
-# Groupcodes utized by Nighthawk, but cross-referenced to the neares eBird 'spuh'
-group_code_xref = C:/users/username/talon/taxonomy/group_code_xref.csv
-```
-
-Linux:
+Linux and Windows example:
 
 ```ini
 [taxonomy]
 # eBird Taxonomy can be acquired from https://...
-ebird_taxonomy = /home/username/talon/taxonomy/eBird_taxonomy_v2025.csv
+ebird_taxonomy = taxonomy/eBird_taxonomy_v2025.csv
 
 # Groupcodes utized by Nighthawk, but cross-referenced to the neares eBird 'spuh'
-group_code_xref = /home/username/talon/taxonomy/group_code_xref.csv
+group_code_xref = taxonomy/group_code_xref.csv
 ```
 
 ### File Naming Convention
@@ -82,59 +61,59 @@ Talon will not recognize any file which it hasn't been informed of via the INI f
 UID_YYYYMMDD_HHMMSS.WAV
 ```
 
-Where UID is a variable length unique identifier, YYYYMMDD is date with the year (4-digit), month (2-digit, zero-padded), and day (2-digit, zero-padded), and HHMMSS is the 24-hour time. This naming scheme is customized in the location section described below, but can be any recognizable Python datetime scheme.
+Where UID is a variable length unique identifier, YYYYMMDD is date with the year (4-digit), month (2-digit, zero-padded), and day (2-digit, zero-padded), and HHMMSS is the 24-hour time. This naming scheme is customized in the location section described below, but can be any recognizable Python datetime scheme. You can read more about the format codes on the [Python datetime format codes page](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes).
 
 This example uses a serial number of a device as the UID:
 
-    56371E6A_20260104_122903.WAV
+```
+56371E6A_20260104_122903.WAV
+```
 
 This example is the hostname of my local Raspberry Pi 5, note that it includes the UTC offset:
 
-    RPI1_20240906_050000-0400.WAV
+```
+RPI1_20240906_050000-0400.WAV
+```
 
 Ultimately, Talon can determine the UTC offset by the time zone listed in the INI file, but including it in the file name isn't a bad idea in the event that you share the file with someone else.
 
 ### Location
 
-This section will describe the metadata you wish to associate with files that match the supplied naming scheme. In this example any file that matches 'RPI1_%%Y%%m%%d_%%H%%M%%S%%z.WAV' will have the accompanying metadata associated with it. Without this metadata, Talon doesn't have the latitude and longitude of the recording station and subsequently can't calculate astronomical dawn/dusk to classify detections as the eBird NFC protocol, daytime or nocturnal.
+This section contains the essential data necessary to calculate the exact start and end of the NFC window. Without this data talon can't proceed. Latitude, longitude, and time zone are necessary to calculate how far below the horizon the sun is at a given time for that location.
+
+File format is used to associate the above location data to all files matching the format pattern. The standard format pattern contains three fields separated by underscores: a unique ID, the start date of the recording, and the start time of the recording. This format was settled on because it's used by at least one major audio recording vendor (i.e., Wildlife Acoustics.)
+
+Latitude and longitude should be in decimal format. Time zone should be an entry from the time zone database, see the [Wikipedia Time Zone Database page](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) for details.
+
+The optional weather station field is used to set a default weather station for this location. You can get a list of locations by running 'tweather --list'.
 
 ```ini
 [RPI1]
 type = station
-name = North Carolina State Capitol Building
-note = DIY microphone (48V phantom power), connected to a Roland Rubix 22, permanently located on the back deck.
-location = Raleigh, NC
-elevation = 466ft
 latitude = 35.780480199773415
 longitude = -78.63909694937483
 timezone = US/Eastern
-make = Raspberry Pi Foundation
-model = Raspberry Pi 5 Model B Rev 1.0
-serial = f003d4d5d87e439e
-copyright = Mark Montazer
 file_format = RPI1_%%Y%%m%%d_%%H%%M%%S%%z.WAV
 weather_station = KRDU
 ```
 
-Here's a description of the fields:
+The metadata section is used to associate optional metadata with the location information above. The section title should always be in the form of UID.metadata. All fields are free form strings and can be written to WAV files using the tmdupdate utility.
 
-* \[UID\] - the text within the brackets is the UID described above.
-* Type - this must be 'station' (lowercase) in order for Talon to know that this is metadata for a location.
-* Name - a useful description of the name associated with related recordings, commonly the eBird hotspot you use when submitting NFC checklists.
-* Note - a note to describe a bit more about the hardware used for recordings at this location.
-* Location - the city and state/province of this location.
-* Elevation - the elevation in feet of this location.
-* Latitude - the latitude, in decimal, of this location.
-* Longitude - the longitude, in decimal, of this location.
-* Timezone - the time zone, as listed in the timezone database of this location. See [Wikipedia entry for Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) for a list.
-* Make / Model / Serial - the make, model, and serial numbmer (if any) of the hardware used to record audio at this locaiton.
-* Copyright - the copyright name you wish associated with recordings from this location.
-* File Format - as described above, the Python datetime format string used to describe audio files for this location.
-* Weather Station - the 4 digit weather.gov station ID for your location weather station. Once you have an INI file created you can use 'tweather --list' to get a list of stations and their distances.
+```ini
+[RPI1.metadata]
+name = North Carolina State Capitol Building
+note = DIY microphone (48V phantom power), connected to a Roland Rubix 22, permanently located on the back deck.
+location = Raleigh, NC
+elevation = 466ft
+make = Raspberry Pi Foundation
+model = Raspberry Pi 5 Model B Rev 1.0
+serial = f003d4d5d87e439e
+copyright = Mark Montazer
+```
 
-### Location.Audio
+### Audio
 
-This section uses UID.audio to define audio parameters for recording.
+This section uses UID.audio to define audio parameters for recording. You can get a list of available recording devices by running the 'trecord --list' command. When trecord is run without command line parameters it will default to these settings.
 
 ```ini
 [RPI1.audio]
@@ -145,14 +124,27 @@ channels=1
 bits=24
 ```
 
-Here's a description of the fields:
+### Example
 
-* Device - this is the recording device that will be used by 'trecord', you can get a list of devices by running 'trecord --list'.
-* Rate - a bit rate supported by the recording device.
-* Channels - the number of channels to record, typically 1.
-* Bits - a bit depth supported by the recording device.
+The following is a complete configuration file, though it contains no optional metadata nor an optional recording device:
+
+```ini
+[general]
+default = RPI1
+audacity_path = C:/Program Files/Audacity/audacity.exe
+
+[taxonomy]
+ebird_taxonomy = taxonomy/eBird_taxonomy_v2025.csv
+group_code_xref = taxonomy/group_code_xref.csv
+
+[RPI1]
+type = station
+latitude = 35.780480199773415
+longitude = -78.63909694937483
+timezone = US/Eastern
+file_format = RPI1_%%Y%%m%%d_%%H%%M%%S%%z.WAV
+```
 
 ## Commands
 
 More detail on the individual commands can be found in the [COMMANDS.md](COMMANDS.md) file.
-

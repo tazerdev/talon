@@ -10,19 +10,16 @@ Example output:
 
 ```shell
 > tlist
-RPI1_20260103_120000-0500.WAV  659.06  59.99  1  32  48000  2026-01-03 12:00:00-0500  2026-01-03 12:59:59-0500  0
-RPI1_20260103_130000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 13:00:00-0500  2026-01-03 13:59:59-0500  0
-RPI1_20260103_140000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 14:00:00-0500  2026-01-03 14:59:59-0500  0
-RPI1_20260103_150000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 15:00:00-0500  2026-01-03 15:59:59-0500  0
-RPI1_20260103_160000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 16:00:00-0500  2026-01-03 16:59:59-0500  0
-RPI1_20260103_170000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 17:00:00-0500  2026-01-03 17:59:59-0500  0
-RPI1_20260103_180000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 18:00:00-0500  2026-01-03 18:59:59-0500  1
-RPI1_20260103_190000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 19:00:00-0500  2026-01-03 19:59:59-0500  1
-RPI1_20260103_200000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 20:00:00-0500  2026-01-03 20:59:59-0500  1
-RPI1_20260103_210000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 21:00:00-0500  2026-01-03 21:59:59-0500  1
-RPI1_20260103_220000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 22:00:00-0500  2026-01-03 22:59:59-0500  1
-RPI1_20260103_230000-0500.WAV  659.05  59.99  1  32  48000  2026-01-03 23:00:00-0500  2026-01-03 23:59:59-0500  1
-RPI1_20260104_000000-0500.WAV  659.05  59.99  1  32  48000  2026-01-04 00:00:00-0500  2026-01-04 00:59:59-0500  1
+RPI1_20250915_200000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-15 20:00:00-0400  2025-09-15 20:59:59-0400  1   
+RPI1_20250915_210000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-15 21:00:00-0400  2025-09-15 21:59:59-0400  1   
+RPI1_20250915_220000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-15 22:00:00-0400  2025-09-15 22:59:59-0400  1   
+RPI1_20250915_230000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-15 23:00:00-0400  2025-09-15 23:59:59-0400  1   
+RPI1_20250916_000000-0400.WAV  659.04MB  59.99m  1  32-bit  48.00kHz  2025-09-16 00:00:00-0400  2025-09-16 00:59:59-0400  1   
+RPI1_20250916_010000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-16 01:00:00-0400  2025-09-16 01:59:59-0400  1   
+RPI1_20250916_020000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-16 02:00:00-0400  2025-09-16 02:59:59-0400  1   
+RPI1_20250916_030000-0400.WAV  659.04MB  59.99m  1  32-bit  48.00kHz  2025-09-16 03:00:00-0400  2025-09-16 03:59:59-0400  1   
+RPI1_20250916_040000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-16 04:00:00-0400  2025-09-16 04:59:59-0400  1   
+RPI1_20250916_050000-0400.WAV  659.05MB  59.99m  1  32-bit  48.00kHz  2025-09-16 05:00:00-0400  2025-09-16 05:59:59-0400  1
 ````
 
 ## talon
@@ -60,7 +57,7 @@ Example:
 
 ## tmdupdate
 
-Used to display, or write (if using --force), metadata of each WAV file:
+Used to display, or write (if using --write), metadata of each WAV file:
 
 ```shell
 > tmdupdate RPI1_20251130_134420-0500.WAV
@@ -86,7 +83,7 @@ NFC|Location: Raleigh, NC
 
 ## tsplit
 
-Used to extract a single audio channel (default 0) from a WAV file. 0 for the first channel (typically left), 1 for the second channel (typically right), etc. No metadata is copied with this command, just a bare WAV file with one channel of audio from the original. You can use tmdupdate to write metadata. Extracted channels are saved under the original filename with '-0' for channel 0, '-1' for channel 1, etc. You'll want to rename the files accordingly once you're confident you have the right channel.
+Used to extract a single audio channel (default 0) from a WAV file. 0 for the first channel (typically left), 1 for the second channel (typically right), etc. tsplit will duplicate the metadata of the original WAV file in the extracted file, so any location information, etc, will be present in the extracted file. Extracted channels are saved under the original filename with '-0' for channel 0, '-1' for channel 1, etc. You'll want to rename the files accordingly once you're confident you have the correct channel.
 
 ```shell
 > tsplit -i .\RPI1_20251130_134420-0500.WAV
@@ -103,7 +100,26 @@ Get a list of recent observations, or future forecast, from the weather station 
 * --samples - Display only the supplied number of observations and forecast hours.
 * --si - Whether or not to use standard units or the US customary units (default)
 
-Example 1, get the 5 most recent observations and the next 5 hours of forecast for the default station in the INI file:
+View a list of nearby weather stations, sorted by distance:
+
+```shell
+> tweather --list
+ID      Dist.    Elev.     Name
+KRDU    10.94mi  394.00ft  Raleigh / Durham, Raleigh-Durham International Airport
+KJNX    21.81mi  164.00ft  Smithfield, Johnston County Airport
+KLHZ    24.90mi  341.00ft  Franklin County Airport
+KHRJ    27.58mi  197.00ft  Erwin, Harnett County Airport
+KTTA    28.33mi  246.00ft  Sanford, Sanford-Lee County Regional Airport
+KTDF    39.93mi  610.00ft  Roxboro, Person County Airport
+KHNZ    41.43mi  515.00ft  Henderson-Oxford Airport
+KRWI    43.02mi  161.00ft  Rocky Mount, Rocky Mount-Wilson Regional Airport
+KGWW    44.30mi  131.00ft  Goldsboro, Goldsboro-Wayne Municipal Airport
+KPOB    45.81mi  184.00ft  Pope Air Force Base
+KFBG    46.97mi  226.00ft  Fort Bragg / Simmons Army Airfield
+...
+```
+
+Get the 5 most recent observations and the next 5 hours of forecast for the default station in the INI file:
 
 ```shell
 > tweather -s 5
