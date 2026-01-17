@@ -147,7 +147,7 @@ def main():
                             start_str = dt.strftime(start, "%Y-%m-%d %H:%M:%S%z")
                             end_str =  dt.strftime(end, "%Y-%m-%d %H:%M:%S%z")
 
-                            print(f"{twf.metadata['name']:24} {twf.metadata['st_size']/1024/1024:7.2f}MB {twf.metadata['duration']/60:6.2f}s {twf.metadata['chunks']['fmt']['channels']:2} {twf.metadata['chunks']['fmt']['bit_depth']:3} bit {twf.metadata['chunks']['fmt']['samples_sec']/1000:3.2f}kHz  {start_str}  {end_str}  {int(twf.metadata['NFC'])}")
+                            print(f"{twf.metadata['name']:24} {twf.metadata['st_size']/1024/1024:7.2f}MB {twf.metadata['duration']/60:>6.2f}m {twf.metadata['chunks']['fmt']['channels']:2} {twf.metadata['chunks']['fmt']['bit_depth']:3}-bit {twf.metadata['chunks']['fmt']['samples_sec']/1000:6.2f}kHz  {start_str}  {end_str}  {int(twf.metadata['NFC'])}")
                 except ValueError as e:
                     pass
 
