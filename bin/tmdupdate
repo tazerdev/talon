@@ -19,7 +19,7 @@ def signal_handler(signum, frame):
 def ParseCommandLineArguments():
     arg_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="tmdupdate - a utility for writing GUANO metadata from the config file into a WAV file.")
     arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Config file to attempt to read.")
-    arg_parser.add_argument('-f', '--force', action='store_true', help='Overwrite the GUANO header if it already exists.')
+    arg_parser.add_argument('-w', '--write', action='store_true', help='Write metadata to WAV file, this will overwrite existing GUANO data.')
     arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
 
     return arg_parser
@@ -51,7 +51,7 @@ def main():
 
                         print(tgf)
 
-                        if args.force:
+                        if args.write:
                             print(f"Writing GUANO header to {curfile}")
                             tgf.write()
                     except wave.Error as e:
@@ -64,7 +64,7 @@ def main():
                 print(f"Error parsing config, the supplied config file contains no section headers.")
                 sys.exit(1)
             except KeyError as e:
-                print(f"Error parsing config, unable to find key: {e}, using commandline arguments instead (if available.)")
+                print(f"Error parsing config, unable to find key: {e}.")
             except argparse.ArgumentTypeError as e:
                 print(f"Error parsing config, invalid value specified for: {e}")
                 sys.exit(1)
