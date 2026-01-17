@@ -385,8 +385,7 @@ class TalonWAVFile:
                                     chunk['offset'] = chunk_offset
                                     chunk['size'] = chunk_sz
                                 elif chunk_id == 'data':
-                                    # don't need to read the entire data chunk into memory as it may be very large, 
-                                    # just record the size and skip to the next chunk
+                                    # don't need to read the entire data chunk into memory, just skip to the next chunk
                                     f.seek(chunk_sz, 1)
                                 else:
                                     chunk['data'] = f.read(chunk_sz)
