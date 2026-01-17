@@ -355,7 +355,7 @@ class TalonWAVFile:
 
                             chunk_id, chunk_sz, chunk_offset, padding = self._get_chunk(f)
 
-                            if chunk_id:
+                            if chunk_id and chunk_id != '\x00\x00\x00\x00':
                                 chunk = {}
 
                                 chunk['name'] = chunk_id
