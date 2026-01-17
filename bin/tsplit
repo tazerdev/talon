@@ -24,6 +24,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-c', '--channel', type=int, default=0, help="In stereo files, left is 0, right is 1.")
     arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
     arg_parser.add_argument('-q', '--quiet', action='store_true', help="Don't display progress indicator.")
+    arg_parser.add_argument('-m', '--metadata', action='store_true', help="Display WAV metadata only then exit.")
 
     return arg_parser
 
@@ -36,13 +37,14 @@ def main():
     if os.path.exists(args.input):
         twf = talonlib.TalonWAVFile(args.input, section=None, taxonomy=None, clear=False, debug=args.debug)
         
-        if args.debug:
+        if args.debug or args.metadata:
             print(twf)
 
-        if twf.channels > args.channel:
-            twf.ExtractChannel(args.channel, args.quiet)
-        else:
-            print(f"Specified channel exceeds number of channels in WAV file.")
+        if not args.metadata:
+            if twf.channels > args.channel:
+                twf.ExtractChannel(args.channel, args.quiet)
+            else:
+                print(f"Specified channel exceeds number of channels in WAV file.")
     else:
         print(f"Input file does not exist.")
 
