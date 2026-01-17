@@ -343,8 +343,6 @@ class TalonWAVFile:
                     riff['order'] = order
 
                     self.metadata['chunks']['riff'] = riff
-                    # self.metadata['type'] = 'RIFF'
-                    # self.metadata['format'] = 'WAVE'
                     self.metadata['st_size'] = os.stat(self._filename).st_size
 
                     if riff['wavid'] == 'WAVE':
