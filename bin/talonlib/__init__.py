@@ -375,6 +375,8 @@ class TalonWAVFile:
                                 self.metadata['chunks'][chunk['name'].strip()] = chunk
                             else:
                                 break
+
+                    self.metadata['duration'] = self.metadata['chunks']['data']['size'] / self.metadata['chunks']['fmt']['bytes_sec']
                 else:
                     print('Not a WAV file.')
         except FileNotFoundError:
