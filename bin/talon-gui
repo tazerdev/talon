@@ -1669,49 +1669,49 @@ class MyFrame(wx.Frame):
 
     # TODO: run in a thread as it can take 5-10s to retrieve data sometimes
     def get_weather(self, event):
-        section = self.config['general']['default']
+        if self.section in self.config and 'weather_station' in self.config[self.section]:
+            stationid = self.config[self.section]['weather_station']
+        else:
+            stationid = None
+        
+        tw = talonlib.TalonWeather(
+            self.config[self.section]['latitude'],
+            self.config[self.section]['longitude'],
+            self.config[self.section]['timezone'],
+            debug=False,
+            stationid=stationid,
+            uscs=True,
+            cachedir=None
+        )
 
-        if section in self.config and 'weather_station' in self.config[section]:
-            stationid = self.config[section]['weather_station']
+        forecast = tw.forecast_table(24)
+        observations = tw.observation_table(24)
 
-            tw = talonlib.TalonWeather(
-                self.config[section]['latitude'],
-                self.config[section]['longitude'],
-                self.config[section]['timezone'],
-                debug=False,
-                stationid=stationid,
-                uscs=True,
-                cachedir=None
-            )
+        max = 0
 
-            forecast = tw.forecast_table(24)
-            observations = tw.observation_table(24)
+        for line in forecast.split('\n'):
+            if len(line) > max:
+                max = len(line)
 
-            max = 0
+        self.weather_txtctrl.Clear()
 
-            for line in forecast.split('\n'):
-                if len(line) > max:
-                    max = len(line)
+        self.weather_txtctrl.AppendText("Future Forecast\n")
+        self.weather_txtctrl.AppendText('-' * max + '\n')
+        self.weather_txtctrl.AppendText(forecast)
 
-            self.weather_txtctrl.Clear()
+        max = 0
 
-            self.weather_txtctrl.AppendText("Future Forecast\n")
-            self.weather_txtctrl.AppendText('-' * max + '\n')
-            self.weather_txtctrl.AppendText(forecast)
+        for line in observations.split('\n'):
+            if len(line) > max:
+                max = len(line)
 
-            max = 0
+        self.weather_txtctrl.AppendText('\n\n')
 
-            for line in observations.split('\n'):
-                if len(line) > max:
-                    max = len(line)
+        self.weather_txtctrl.AppendText("Recent Observations\n")
+        self.weather_txtctrl.AppendText('-' * max + '\n')
+        self.weather_txtctrl.AppendText(observations)
 
-            self.weather_txtctrl.AppendText('\n\n')
-
-            self.weather_txtctrl.AppendText("Recent Observations\n")
-            self.weather_txtctrl.AppendText('-' * max + '\n')
-            self.weather_txtctrl.AppendText(observations)
-
-            self.weather_txtctrl.ShowPosition(0)
+        self.weather_txtctrl.ShowPosition(0)
 
     def generate_checklists(self, event):
         # TODO: Warning, there's the risk of getting the dates/times wrong
