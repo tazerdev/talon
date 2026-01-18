@@ -673,7 +673,7 @@ class MyFrame(wx.Frame):
         if os.path.exists(fpath):
             with open(fpath, mode='r') as infile:
                 reader = csv.reader(infile)
-                sfilter = { row[0]:float(row[1]) for row in reader }
+                self.sfilter = { row[0]:float(row[1]) for row in reader }
 
         if 'taxonomy' in config and 'ebird_taxonomy' in config['taxonomy']:
             epath = os.path.join(talon_dir, config['taxonomy']['ebird_taxonomy'])
