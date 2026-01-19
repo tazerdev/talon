@@ -42,7 +42,6 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('-s', '--species', default="all", nargs='?', help="Common name of a bird (e.g., woothr, Barn Owl, etc) you wish to work with.")
     arg_parser.add_argument('-e', '--engine', default='all', nargs='+', choices=['all', 'bn', 'nh', 'ta'], help="The analysis engine whose results you wish to return.")
     arg_parser.add_argument('-o', '--protocol', default='all', nargs='+', choices=['all', 'nfc', 'noc', 'day',], help="The eBird protocol whose results you wish to return.")
-    # arg_parser.add_argument('--disposition', default='all', nargs='+', choices=['all', 'confirmed', 'excluded', 'unconfirmed',], help="The eBird protocol whose results you wish to return.")
 
     arg_parser.add_argument('-t', '--threshold', default=0.25, type=float, help="Only generate output for events above this confidence threshold.")
     arg_parser.add_argument('--station', default='all', type=str, help="The talon audio station.")
