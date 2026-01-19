@@ -55,6 +55,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('--full-height', action='store_true', help="Set this option if you want the entire frequency to be graphed, otherwise the audio will be resampled to 22,050Hz.")
     arg_parser.add_argument('--timeseries', action='store_true', help="Extract audio clips of results.")
     arg_parser.add_argument('--checklist', action='store_true', help="Create checklists.")
+    arg_parser.add_argument('--cleanup', action='store_true', help="Clean up clips and graph for displayed detections.")
     arg_parser.add_argument('-l', '--location', type=str, help="The name of a location specified in the config file, for use with checklists.")
 
     arg_parser.add_argument('--disposition', default='all', nargs='+', choices=['all', 'confirmed', 'unconfirmed', 'excluded'], help="The analysis engine whose results you wish to return.")
@@ -381,6 +382,26 @@ def generate_checklists(config, section, events):
     
     return output
 
+def cleanup(clip_dir, events):
+    for event in events:
+        dur_sec = event['stop'] - event['start']
+        clip_file = os.path.join(clip_dir, f"{event['dt'].strftime('%Y%m%d-%H%M%S%z')}-{event['engine']}-{event['species_code']}.WAV")
+        spec_file = os.path.join(clip_dir, f"{event['dt'].strftime('%Y%m%d-%H%M%S%z')}-{event['engine']}-{event['species_code']}.PNG")
+
+        try:
+            if os.path.exists(clip_file):
+                print(f"Removing {clip_file}")
+                os.remove(clip_file)
+        except PermissionError as e:
+            print(f"Permission error removing {clip_file}")
+
+        try:
+            if os.path.exists(spec_file):
+                print(f"Removing {spec_file}")
+                os.remove(spec_file)
+        except PermissionError as e:
+            print(f"Permission error removing {spec_file}")
+
 def main():
     signal(SIGINT, signal_handler)
 
@@ -610,6 +631,12 @@ def main():
             p.close()
     
         p.join()
+    elif args.cleanup:
+        if events:
+            dest_path, filename = os.path.split(ev['filename'])
+            clip_dir = os.path.join(dest_path, 'clips')
+
+            cleanup(clip_dir, events)
     else:
         if len(output) > 0:
             print(output.strip())
