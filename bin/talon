@@ -55,7 +55,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('--full-height', action='store_true', help="Set this option if you want the entire frequency to be graphed, otherwise the audio will be resampled to 22,050Hz.")
     arg_parser.add_argument('--timeseries', action='store_true', help="Extract audio clips of results.")
     arg_parser.add_argument('--checklist', action='store_true', help="Create checklists.")
-    arg_parser.add_argument('--cleanup', action='store_true', help="Clean up clips and graph for displayed detections.")
+    arg_parser.add_argument('--cleanup', action='store_true', help="Clean up audio clips and spectrograms for displayed detections.")
     arg_parser.add_argument('-l', '--location', type=str, help="The name of a location specified in the config file, for use with checklists.")
 
     arg_parser.add_argument('--disposition', default='all', nargs='+', choices=['all', 'confirmed', 'unconfirmed', 'excluded'], help="The analysis engine whose results you wish to return.")
