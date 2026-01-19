@@ -88,8 +88,8 @@ def extract_worker(twf, event, graph, force):
         print(f"Terminating worker for {event['dt'].strftime('%Y-%m-%d-%H:%M:%S')} - {(event['dt']+timedelta(seconds=dur_sec)).strftime('%Y-%m-%d-%H:%M:%S')}")
 
 def add_detection(user_string, found_files):
-    # example user string
     # TODO: validate cur[0] == str, cur[1:2] == int, cur[3] == str, cur[4] == int or float, cur[5] == str
+    # example user string
     # "DR10L_20251101_005921-0400.WAV,105,108,uplsan,.75,unconfirmed"
     cur = user_string.split(',')
 
@@ -121,9 +121,6 @@ def update_detection(user_string, events):
     cur = user_string.split(',')
     row = []
 
-    # {'filename': 'RPI1_20251223_080000-0500.WAV', 'dt': datetime.datetime(2025, 12, 23, 8, 0, 36, tzinfo=datetime.timezone(datetime.timedelta(days=-1, seconds=68400))),
-    # 'probability': 0.4682, 'species_code': 'tuftit', 'common_name': 'Tufted Titmouse', 'engine': 'bn', 'start': 36.0, 'start_rel': '00:00:36.00',
-    # 'stop': 39.0, 'disposition': 'unconfirmed', 'protocol': 'day', 'station': 'RPI1'}
     ta_fields = [ 'filename', 'orig_start', 'orig_end', 'orig_engine', 'orig_species', 'start', 'end', 'species_code', 'probability', 'disposition' ]
 
     for ev in events:
@@ -146,29 +143,6 @@ def update_detection(user_string, events):
                     writer.writeheader()
                     writer.writerow(row)
 
-    # dest_path, filename = os.path.split(cur[0])
-    # filename, extension = os.path.splitext(filename)
-    # ta_file = os.path.join(dest_path, str(filename) + '_talon.csv')
-    # ta_fields = [ 'filename', 'orig_start', 'orig_end', 'orig_engine', 'orig_species', 'start', 'end', 'species_code', 'probability', 'disposition' ]
-
-    # # filename,orig_start,orig_end,orig_engine,orig_species,start,end,species_code,probability,disposition
-    # row = [ cur[0], 0, 0, '', '', cur[1], cur[2], cur[3], cur[4], cur[5] ]
-
-    # print(f"Writing contents to {ta_file}: {row}")
-
-    # # if file exists, append, otherwise create a new csv with header
-    # if os.path.exists(ta_file):
-    #     # TODO: should attempt to read the file first and then verify that the row doesn't already exist
-    #     with open(ta_file, mode='a', newline='') as csvfile:
-    #         writer = csv.writer(csvfile)
-    #         writer.writerow(row)
-    # else:
-    #     with open(ta_file, "w", newline="") as file:
-    #         writer = csv.writer(csvfile, fieldnames=ta_fields)
-    #         writer.writeheader()
-    #         writer.writerow(row)
-
-# def generate_timeseries_graph(events: list, start_dt: dt, stop_dt: dt, frequency: int, title: str, ymax: int, tz: str, filename: str):
 def generate_timeseries_graph(events: list, frequency=5, ymax=None):
     """
     Generate a frequency graph of supplied events.
@@ -384,7 +358,6 @@ def generate_checklists(config, section, events):
 
 def cleanup(clip_dir, events):
     for event in events:
-        dur_sec = event['stop'] - event['start']
         clip_file = os.path.join(clip_dir, f"{event['dt'].strftime('%Y%m%d-%H%M%S%z')}-{event['engine']}-{event['species_code']}.WAV")
         spec_file = os.path.join(clip_dir, f"{event['dt'].strftime('%Y%m%d-%H%M%S%z')}-{event['engine']}-{event['species_code']}.PNG")
 
