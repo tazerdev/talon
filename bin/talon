@@ -55,6 +55,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('--full-height', action='store_true', help="Set this option if you want the entire frequency to be graphed, otherwise the audio will be resampled to 22,050Hz.")
     arg_parser.add_argument('--timeseries', action='store_true', help="Extract audio clips of results.")
     arg_parser.add_argument('--checklist', action='store_true', help="Create checklists.")
+    arg_parser.add_argument('--nofilter', action='store_true', help="Ignore the filter.csv file.")
     arg_parser.add_argument('--cleanup', action='store_true', help="Clean up audio clips and spectrograms for displayed detections.")
     arg_parser.add_argument('-l', '--location', type=str, help="The name of a location specified in the config file, for use with checklists.")
 
@@ -421,7 +422,7 @@ def main():
     fpath = os.path.join(talon_dir, 'filter.csv')
 
     # load the species filter, taxonomy, and group code xref
-    if os.path.exists(fpath):
+    if not args.nofilter and os.path.exists(fpath):
         with open(fpath, mode='r') as infile:
             reader = csv.reader(infile)
             sfilter = { row[0]:float(row[1]) for row in reader }
