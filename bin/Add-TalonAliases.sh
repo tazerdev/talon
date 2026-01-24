@@ -4,11 +4,12 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 bindir=$SCRIPT_DIR
-etcdir=$(dirname $SCRIPT_DIR)/etc
+inidir=$(dirname $SCRIPT_DIR)
 
-alias talon="$bindir/talon -c $etcdir/talon.ini"
-alias talon-gui="$bindir/talon-gui -c $etcdir/talon.ini"
-alias tlist="$bindir/tlist -c $etcdir/talon.ini"
-alias tmdupdate="$bindir/tmdupdate -c $etcdir/talon.ini"
-alias trecord="$bindir/trecord -c $etcdir/talon.ini"
-alias tweather="$bindir/tweather -c $etcdir/talon.ini"
+alias talon="$bindir/talon -c $inidir/talon.ini"
+alias talon-gui="$bindir/talon-gui -c $inidir/talon.ini"
+alias tlist="$bindir/tlist -c $inidir/talon.ini"
+alias tmdupdate="$bindir/tmdupdate -c $inidir/talon.ini"
+alias trecord="$bindir/trecord -c $inidir/talon.ini"
+alias tsplit="$bindir/tsplit"
+alias tweather="$bindir/tweather -c $inidir/talon.ini"
