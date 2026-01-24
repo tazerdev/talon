@@ -1052,6 +1052,105 @@ class MyFrame(wx.Frame):
 
             dlg.Destroy()
 
+    def keyhandler_letter_d(self):
+        item_count = self.dlc1.GetSelectedItemCount()
+        next = last = cur = self.dlc1.GetFirstSelected()
+
+        # we can only duplicate one item at a time
+        if item_count == 1:
+            dlg = override_dialog(self)
+            dlg.set_taxonomy(list(self.taxonomy.values()))
+
+            for evt in self.events:
+                if evt['uid'] == self.detections[cur][9]:
+                    old = evt
+                    dlg.populate(evt)
+
+            if dlg.ShowModal() == wx.ID_OK:
+                new_common_name = dlg.text_ctrl_1.Value
+                new_species_code = [name for name, cn in self.taxonomy.items() if cn == new_common_name]
+
+                # in the event that we receive a common name that's not in the taxonomy list
+                # (e.g., neighbor's dog, Spring Peepers, etc) skip the species code but
+                # still capture the value anyway as we'll use it as the common namea
+                if len(new_species_code) > 0:
+                    new_species_code = new_species_code[0]
+                else:
+                    new_species_code = dlg.text_ctrl_1.Value
+
+                new_start = dlg.spin_ctrl_double_1.Value
+                new_stop = dlg.spin_ctrl_double_2.Value
+
+                # unselect the current item
+                self.dlc1.Select(cur, False)
+
+                new = {}
+
+                new['filename'] = old['filename']
+
+                mins, secs = divmod(new_start, 60)
+                hours, mins = divmod(mins, 60)
+                start_rel = f"{int(hours):02d}:{int(mins):02d}:{secs:05.2f}"
+                delta = old['start'] - new_start
+                new['dt'] = old['dt'] - timedelta(seconds=float(delta))
+
+                new['start_rel'] = start_rel
+                new['start'] = new_start
+                new['stop'] = new_stop
+                new['engine'] = 'ta'
+
+                if new_species_code:
+                    new['species_code'] = new_species_code
+                    new['common_name'] = new_common_name
+                else:
+                    new['species_code'] = ''
+                    new['common_name'] = dlg.text_ctrl_1.Value
+
+                new['probability'] = 1.0
+                new['orig_start'] = new_start
+                new['orig_stop'] = new_stop
+                new['orig_engine'] = 'ta'
+                new['orig_species'] = new['species_code']
+                new['orig_common_name'] = new['common_name']
+                new['orig_probability'] = new['probability']
+                new['disposition'] = 'unconfirmed'
+                new['overridden'] = True
+                new['curated'] = True
+                new['protocol'] = old['protocol']
+                new['station'] = old['station']
+
+                # make new event uid the max uid + 1
+                new['uid'] = 0
+
+                for evt in self.events:
+                    if evt['uid'] > new['uid']:
+                        new['uid'] = evt['uid']
+
+                new['uid'] += 1
+
+                self.dirtycache = True
+                self.events.append(new)
+
+                last = cur
+
+                # get the next selected item
+                cur = self.dlc1.GetNextSelected(cur)
+
+            next = last + 1
+
+            self.build_detections_list()
+            self.update_detection_status_label()
+            self.dlc1.UpdateListContents(self.detections)
+            self.build_identity_list()
+
+            if next < len(self.detections):
+                self.dlc1.SetItemState(next, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
+                self.dlc1.Focus(next)
+
+            self.update_detection_status_label()
+
+            dlg.Destroy()
+
     def keyhandler_letter_c(self):
         next = last = cur = self.dlc1.GetFirstSelected()
 
@@ -1183,6 +1282,9 @@ class MyFrame(wx.Frame):
         # letter c - Confirm
         elif keycode == 67:
             self.keyhandler_letter_c()
+        # letter d - Duplicate
+        elif keycode == 68:
+            self.keyhandler_letter_d()
         # letter x - eXclude
         elif keycode == 88:
             self.keyhandler_letter_x()
