@@ -42,21 +42,19 @@ source talon-venv/bin/activate
 
 ## Install Python Requirements
 
-Talon requires a number of additional Python modules in order to work. These dependencies are captured in a requirements.txt file in the Talon repository folder. We simply need to feed that file to pip and wait for a few minutes for the install to complete:
-
-Windows:
-
-```shell
-pip install ephem guano requests astral sounddevice soundfile wxpython librosa matplotlib
-```
-
-Note, on Linux (you will need to install some system dependencies before you can pip install the necessary Python modules). This example uses Fedora:
+Talon requires a number of additional Python modules in order to work. If you're running Windows you can skip this command and go straight to the pip install command below. If you're running Linux you will need to install some system dependencies before running the pip command below. This example uses Fedora to install the required development packages:
 
 ```shell
 /usr/bin/dnf install gtk3 gtk3-devel python3-devel freeglut-devel mesa-libGLU-devel mesa-libGL-devel gstreamer1-plugins-base-devel
 ```
 
-## Setup Windows Command Aliases
+Use pip to install the required Python packages:
+
+```shell
+pip install ephem guano requests astral sounddevice soundfile wxpython librosa matplotlib
+```
+
+## Setup Command Aliases
 
 The typical way to execute a Python script, under Windows, is to provide the full path to the Python binary, the full path to the script that you wish to execute, and any additional command line arguments. Since all of the Talon utilities require a configuration file be supplied as an argument, this means an additional full path to the config file. You end up with a command that looks like this:
 

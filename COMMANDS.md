@@ -42,6 +42,8 @@ talon can be used to display all detection information, including curations gene
 * --timeseries - Generate a time series graph of all displayed detections (saved as timeseries.png in the current working directory).
 * --checklist - Group all detections into checklist-like tables. Suitable for aiding in the input of eBird checklists.
 * --disposition - Display only the detections matching the specified disposition(s).
+*  --nofilter - Ignore the filter.csv file.
+*  --cleanup - Remove audio clips and spectrograms for displayed detections.
 
 Fiels are the absolute date/time of the detection, the start time (relative to the WAV file), the location ID, the eBird protocol, the engine used to make the detection, the confidence/probability, and the Common Name (species code).
 
@@ -142,7 +144,7 @@ Recent Observations
 2026-01-04 07:51:00   28.04F   95.66%   0.00 mph N    ------  1018.30 mbar   9.00 mi  Clear
 ```
 
-Example 2, get a one-liner of current conditions in US units and SI:
+Example 2, get a one-liner of current conditions in US units and SI units:
 
 ```shell
 > tweather --now
