@@ -187,7 +187,7 @@ def main():
                 for item in ts:
                     pass
 
-                    if i >= 24:
+                    if i >= 24 * (60 / args.duration):
                         break
 
                     i += 1
