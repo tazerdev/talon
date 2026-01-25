@@ -1110,29 +1110,27 @@ class TalonSchedule():
 
         self._start = self._date.astimezone(self._curtz)
         self._stop = None
-        self._tomorrow = self.MidnightLocal + timedelta(seconds=86400)
+        self._tomorrow = self.midnloc + timedelta(seconds=86400)
 
         self._count = 1
         self._limit = hours
 
         self._initial = True
-        self._debug = True
 
     def initialize(self):
         location=LocationInfo(name=self._name, timezone=self._timezone, latitude=self._latitude, longitude=self._longitude)
 
-        self.AstronomicalDawn = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._utc)['dawn'].replace(microsecond=0)
-        self.AstronomicalDawn = self.AstronomicalDawn.astimezone(self._utc)
-        self.Noon = dt.combine(self._date, time(12,0,0)).astimezone(self._utc).replace(microsecond=0)
-        self.AstronomicalDusk = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._utc)['dusk'].replace(microsecond=0)
-        self.AstronomicalDusk = self.AstronomicalDusk.astimezone(self._utc)
-
-        self.AstronomicalDawnLocal = self.AstronomicalDawn.astimezone(self._curtz)
-        self.NoonLocal = dt.combine(self._date, time(12,0,0)).astimezone(self._curtz).replace(microsecond=0)
-        self.AstronomicalDuskLocal = self.AstronomicalDusk.astimezone(self._curtz)
-        self.MidnightLocal = dt.combine(self._date, time(0,0,0)).astimezone(self._curtz).replace(microsecond=0)
-
-        self.Midnight = self.MidnightLocal.astimezone(self._utc).replace(microsecond=0)
+        self.adawnloc = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._curtz)['dawn'].replace(microsecond=0)
+        self.aduskloc = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._curtz)['dusk'].replace(microsecond=0)
+        self.noonloc = dt.combine(self._date, time(12,0,0)).astimezone(self._curtz).replace(microsecond=0)
+        self.midnloc = dt.combine(self._date, time(0,0,0)).astimezone(self._curtz).replace(microsecond=0)
+        
+        if self._debug:
+            self.adawnutc = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._utc)['dawn'].replace(microsecond=0)
+            self.aduskutc = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._utc)['dusk'].replace(microsecond=0)
+            self.noonutc = dt.combine(self._date, time(12,0,0)).astimezone(self._utc).replace(microsecond=0)
+            self.noonutc = dt.combine(self._date, time(12,0,0)).astimezone(self._curtz).replace(microsecond=0)
+            self.midnutc = dt.combine(self._date, time(0,0,0)).astimezone(self._curtz).replace(microsecond=0)
 
     def __str__(self):
         output = ""
@@ -1146,19 +1144,15 @@ class TalonSchedule():
         output += f"Longitude : {self._longitude}\n"
         output += f"Date      : {self._date}\n\n"
 
-        output += f"Time Zone: UTC\n"
+        output += f"NFC Window:\n"
         output += f'-' * 58 + '\n'
-        output += f"Midnight          : {self.Midnight.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Astronomical Dawn : {self.AstronomicalDawn.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Noon              : {self.Noon.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Astronomical Dusk : {self.AstronomicalDusk.strftime('%Y%m%d %H:%M:%S %Z')}\n\n"
 
-        output += f"Time Zone: {self._timezone}\n"
-        output += f'-' * 58 + '\n'
-        output += f"Midnight          : {self.MidnightLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Astronomical Dawn : {self.AstronomicalDawnLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Noon              : {self.NoonLocal.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Astronomical Dusk : {self.AstronomicalDuskLocal.strftime('%Y%m%d %H:%M:%S %Z')}"
+        output += f"Astronomical Dawn : {self.adawnloc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Astronomical Dusk : {self.aduskloc.strftime('%Y%m%d %H:%M:%S %Z')}"
+
+        if self._debug:
+            output += f"\nAstronomical Dawn : {self.adawnutc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+            output += f"Astronomical Dusk : {self.aduskutc.strftime('%Y%m%d %H:%M:%S %Z')}"
 
         return output
 
@@ -1180,16 +1174,16 @@ class TalonSchedule():
                 curdur = self._duration - (self._start.minute * 60 + self._start.second - self._duration) % self._duration
 
             # today @ Midnight to Astronomical Dawn
-            if self.MidnightLocal <= self._start < self.AstronomicalDawnLocal:
-                window = (self.AstronomicalDawnLocal - self._start).total_seconds()
+            if self.midnloc <= self._start < self.adawnloc:
+                window = (self.adawnloc - self._start).total_seconds()
                 protocol = "NFC"
 
                 if curdur >= window:
                     curdur = window
 
             # Astronomical Dawn to Noon
-            elif self.AstronomicalDawnLocal <= self._start < self.Noon:
-                window = (self.Noon - self._start).total_seconds()
+            elif self.adawnloc <= self._start < self.noonloc:
+                window = (self.noonloc - self._start).total_seconds()
                 protocol = "DAY"
 
                 if curdur > window:
@@ -1198,15 +1192,15 @@ class TalonSchedule():
                     curdur = self._duration - (self._start.minute * 60 + self._start.second - self._duration) % self._duration
                     
             # Noon to Astronomical Dusk
-            elif self.Noon <= self._start < self.AstronomicalDuskLocal:
-                window = (self.AstronomicalDuskLocal - self._start).total_seconds()
+            elif self.noonloc <= self._start < self.aduskloc:
+                window = (self.aduskloc - self._start).total_seconds()
                 protocol = "DAY"
 
                 if curdur >= window:
                     curdur = window
 
             # Astronomical Dusk to tomorrow @ Midnight
-            elif self.AstronomicalDuskLocal <= self._start < self._tomorrow:
+            elif self.aduskloc <= self._start < self._tomorrow:
                 window = (self._tomorrow - self._start).total_seconds()
                 protocol = "NFC"
 
@@ -1229,8 +1223,8 @@ class TalonSchedule():
                 self._date = self._start
                 self.initialize()
 
-                self._start = self.MidnightLocal
-                self._tomorrow = self.MidnightLocal + timedelta(seconds=86400)
+                self._start = self.midnloc
+                self._tomorrow = self.midnloc + timedelta(seconds=86400)
 
             # if limit is -1 then never stop iterating
             if self._limit >= 0 and (self._start >= self._orig_date + timedelta(hours=self._limit + 1)):
