@@ -162,11 +162,16 @@ def main():
             # otherwise, we'll record infinitely, which may be fine.
             hours = -1
             
+            if 'name' in config[section]:
+                location = config[section]['name']
+            else:
+                location = f"{float(config[section]['latitude']):5.8f}, {float(config[section]['longitude']):5.8f}"
+
             ts = talonlib.TalonSchedule(
                 config[section]['latitude'],
                 config[section]['longitude'],
                 config[section]['timezone'],
-                config[section]['name'],
+                location,
                 dt.now(),
                 hours,
                 args.duration * 60,
