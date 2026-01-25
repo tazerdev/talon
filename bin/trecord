@@ -141,7 +141,11 @@ def main():
         if args.device:
             curdevice = args.device
         else:
-            curdevice = config[sec_audio]['device']
+            if sec_audio in config:
+                curdevice = config[sec_audio]['device']
+            else:
+                print(f'Missing audio section ({sec_audio}) in ini file.')
+                sys.exit(1)
 
         # use cli values by default
         vals = {
