@@ -1259,9 +1259,6 @@ class MyFrame(wx.Frame):
             last = cur
             cur = self.dlc1.GetNextSelected(cur)
 
-        self.build_detections_list()
-        self.dlc1.UpdateListContents(self.detections)
-        
         next = last + 1
 
         if next < len(self.detections):
