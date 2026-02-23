@@ -155,7 +155,7 @@ class TalonConfig:
     def _load_config(self):
         if os.path.exists(self.config_path):
             try:
-                self.config = configparser.ConfigParser()
+                self.config = configparser.ConfigParser(interpolation=None)
                 # codecs is needed because the RØDE is unicode
                 self.config.read_file(codecs.open(self.config_path, 'r', 'utf8'))
                 # self.config.read(self.config_path)

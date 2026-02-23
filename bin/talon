@@ -75,7 +75,7 @@ def twf_worker(filename, section, taxonomy, found_files, startdt=None):
     if startdt:
         dur = curfile.metadata['duration']
         stop = start + timedelta(seconds=dur)
-        cur = startdt
+        cur = startdt.astimezone()
 
     if not startdt or (start <= cur < stop) or (start > cur):
         found_files[curfile.metadata['name']] = curfile

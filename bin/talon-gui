@@ -295,6 +295,7 @@ class MyFrame(wx.Frame):
         self.show_unconfirmed_curations = True
         self.show_nighthawk_detections = True
         self.show_birdnet_detections = True
+        self.show_talon_detections = True
         self.show_diurnal_detections = True
         self.show_nocturnal_detections = True
         self.show_nfc_detections = True
@@ -886,7 +887,7 @@ class MyFrame(wx.Frame):
                 if (det['disposition'] == 'confirmed' and self.show_confirmed_curations) or (det['disposition'] == 'excluded' and self.show_excluded_curations) or (det['disposition'] == 'unconfirmed' and self.show_unconfirmed_curations):
                     if det['dt'] >= self.start_dt and det['dt'] <= self.stop_dt:
                         if det['probability'] >= self.threshold:
-                            if (det['engine'] == 'ta') or (det['engine'] == 'bn' and self.show_birdnet_detections) or (det['engine'] == 'nh' and self.show_nighthawk_detections):
+                            if (det['engine'] == 'ta' and self.show_talon_detections) or (det['engine'] == 'bn' and self.show_birdnet_detections) or (det['engine'] == 'nh' and self.show_nighthawk_detections):
                                 if det['engine'] == 'nh':
                                     common_name = f"{det['common_name']} ({det['species_code']})"
                                     orig_engine = det['engine']
@@ -1490,6 +1491,7 @@ class MyFrame(wx.Frame):
             [ None, None, None ],
             [ 'BirdNET Detections', self.toggle_birdnet_detections, self.show_birdnet_detections ],
             [ 'Nighthawk Detections', self.toggle_nighthawk_detections, self.show_nighthawk_detections ],
+            [ 'Talon Detections', self.toggle_talon_detections, self.show_talon_detections ],
             [ None, None, None ],
             [ 'Diurnal Detections', self.toggle_diurnal_detections, self.show_diurnal_detections ],
             [ 'Nocturnal Detections', self.toggle_nocturnal_detections, self.show_nocturnal_detections ],
@@ -1606,6 +1608,18 @@ class MyFrame(wx.Frame):
             self.show_nighthawk_detections = False
         else:
             self.show_nighthawk_detections = True
+    
+        last = self.dlc1.GetFirstSelected()
+        self.build_detections_list()
+        self.update_detection_status_label()
+        self.dlc1.UpdateListContents(self.detections)
+        self.dlc1.Select(last)
+
+    def toggle_talon_detections(self, evt):
+        if self.show_talon_detections:
+            self.show_talon_detections = False
+        else:
+            self.show_talon_detections = True
     
         last = self.dlc1.GetFirstSelected()
         self.build_detections_list()

@@ -1,0 +1,14 @@
+[general]
+default = RPI1
+audacity_path = C:/Program Files/Audacity/audacity.exe
+
+[taxonomy]
+ebird_taxonomy = taxonomy/eBird_taxonomy_v2025.csv
+group_code_xref = taxonomy/group_code_xref.csv
+
+[RPI1]
+type = station
+latitude = 35.780480199773415
+longitude = -78.63909694937483
+timezone = US/Eastern
+file_format = RPI1_%Y%m%d_%H%M%S%z.WAV
