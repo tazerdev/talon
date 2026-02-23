@@ -1240,6 +1240,7 @@ class MyFrame(wx.Frame):
                     self.detections[cur][10] = 'unconfirmed'
 
                     det['engine'] = det['orig_engine']
+                    self.detections[cur][4] = det['orig_engine']
 
                     # calculate the start time relative to the beginning of the WAV file
                     mins, secs = divmod(det['orig_start'], 60)
@@ -1256,6 +1257,7 @@ class MyFrame(wx.Frame):
                     det['curated'] = True
                     det['overwritewave'] = True
                     det['overridden'] = False
+                    self.detections[cur][12] = False
 
             last = cur
             cur = self.dlc1.GetNextSelected(cur)
