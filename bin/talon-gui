@@ -2162,7 +2162,7 @@ class duplicate_dialog(wx.Dialog):
         sizer_3 = wx.BoxSizer(wx.VERTICAL)
         sizer_1.Add(sizer_3, 1, wx.ALL | wx.EXPAND, 10)
 
-        label_1 = wx.StaticText(self, wx.ID_ANY, "Enter eBird Common Name or Nighthawk Group Code:")
+        label_1 = wx.StaticText(self, wx.ID_ANY, "Search for an eBird Common Name:")
         sizer_3.Add(label_1, 0, wx.ALL, 3)
 
         self.text_ctrl_1 = wx.TextCtrl(self, wx.ID_ANY, "")
@@ -2221,72 +2221,6 @@ class override_dialog(wx.Dialog):
         kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER | wx.STAY_ON_TOP
         wx.Dialog.__init__(self, *args, **kwds)
         self.SetTitle("Override Detection")
-
-        sizer_1 = wx.BoxSizer(wx.VERTICAL)
-
-        sizer_3 = wx.BoxSizer(wx.VERTICAL)
-        sizer_1.Add(sizer_3, 1, wx.ALL | wx.EXPAND, 10)
-
-        label_1 = wx.StaticText(self, wx.ID_ANY, "Search for an eBird Common Name:")
-        sizer_3.Add(label_1, 0, wx.ALL, 3)
-
-        self.text_ctrl_1 = wx.TextCtrl(self, wx.ID_ANY, "")
-        sizer_3.Add(self.text_ctrl_1, 0, wx.EXPAND, 0)
-
-        sizer_4 = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_3.Add(sizer_4, 1, wx.ALL | wx.EXPAND, 0)
-
-        label_2 = wx.StaticText(self, wx.ID_ANY, "Start:")
-        sizer_4.Add(label_2, 0, 0, 0)
-
-        self.spin_ctrl_double_1 = wx.SpinCtrlDouble(self, wx.ID_ANY, initial=0.0, min=0.0, max=86400.0)
-        self.spin_ctrl_double_1.SetIncrement(0.1)
-        self.spin_ctrl_double_1.SetDigits(2)
-        sizer_4.Add(self.spin_ctrl_double_1, 0, 0, 0)
-
-        label_3 = wx.StaticText(self, wx.ID_ANY, "Stop:")
-        sizer_4.Add(label_3, 0, 0, 0)
-
-        self.spin_ctrl_double_2 = wx.SpinCtrlDouble(self, wx.ID_ANY, initial=0.0, min=0.0, max=86400.0)
-        self.spin_ctrl_double_2.SetIncrement(0.1)
-        self.spin_ctrl_double_2.SetDigits(2)
-        sizer_4.Add(self.spin_ctrl_double_2, 0, wx.ALL, 0)
-
-        sizer_2 = wx.StdDialogButtonSizer()
-        sizer_1.Add(sizer_2, 0, wx.ALIGN_RIGHT | wx.ALL, 10)
-
-        self.button_OK = wx.Button(self, wx.ID_OK, "")
-        self.button_OK.SetDefault()
-        sizer_2.AddButton(self.button_OK)
-
-        self.button_CANCEL = wx.Button(self, wx.ID_CANCEL, "")
-        sizer_2.AddButton(self.button_CANCEL)
-
-        sizer_2.Realize()
-
-        self.SetSizer(sizer_1)
-        sizer_1.Fit(self)
-
-        self.SetAffirmativeId(self.button_OK.GetId())
-        self.SetEscapeId(self.button_CANCEL.GetId())
-
-        self.Layout()
-        self.Centre()
-
-    def populate(self, det):
-        self.text_ctrl_1.Value = det['common_name']
-        self.spin_ctrl_double_1.Value = det['start']
-        self.spin_ctrl_double_2.Value = det['stop']
-
-    def set_taxonomy(self, taxonomy):
-        self.text_ctrl_1.AutoComplete(taxonomy)
-
-
-class duplicate_dialog(wx.Dialog):
-    def __init__(self, *args, **kwds):
-        kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER | wx.STAY_ON_TOP
-        wx.Dialog.__init__(self, *args, **kwds)
-        self.SetTitle("Duplicate Detection")
 
         sizer_1 = wx.BoxSizer(wx.VERTICAL)
 
