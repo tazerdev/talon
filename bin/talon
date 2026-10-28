@@ -37,6 +37,7 @@ def ParseCommandLineArguments():
     arg_parser.add_argument('file', nargs='?', help="File to parse, if no file is specified then all files in the current directory will be considered.")
     arg_parser.add_argument('-c', '--config', default="talon.ini", type=str, help="Path to a Talon config file to attempt to read.")
     arg_parser.add_argument('-j', '--json', action='store_true', help='Output results in JSON format.')
+    arg_parser.add_argument('--csv', action='store_true', help='Output results in CSV format.')
     arg_parser.add_argument('-d', '--debug', action='store_true', help='Print extra debugging information.')
     arg_parser.add_argument('-r', '--recurse', action='store_true', help='List files recursively.')
     arg_parser.add_argument('-s', '--species', default="all", nargs='?', help="Common name of a bird (e.g., woothr, Barn Owl, etc) you wish to work with.")
@@ -561,12 +562,26 @@ def main():
                     else:
                         color = RESET
 
-                    # accepted iso formats:
-                    # https://docs.python.org/3/library/datetime.html#datetime.datetime.fromisoformat
-                    output += f"{color}{ev['dt'].isoformat(timespec='milliseconds')}  "
-                    output += f"{ev['start_rel']}  {ev['station']:{maxstation}}  "
-                    output += f"{ev['protocol']:3}  {ev['engine']:2}  "
-                    output += f"{ev['probability']*100:>6.2f}%  {ev['common_name']} ({ev['species_code']}){RESET}\n"
+                    if not args.csv:
+                        # accepted iso formats:
+                        # https://docs.python.org/3/library/datetime.html#datetime.datetime.fromisoformat
+                        output += f"{color}{ev['dt'].isoformat(timespec='milliseconds')}  "
+                        output += f"{ev['start_rel']}  {ev['station']:{maxstation}}  "
+                        output += f"{ev['protocol']:3}  {ev['engine']:2}  "
+                        output += f"{ev['probability']*100:>6.2f}%  {ev['common_name']} ({ev['species_code']}){RESET}\n"
+                    else:
+                        # accepted iso formats:
+                        # https://docs.python.org/3/library/datetime.html#datetime.datetime.fromisoformat
+                        output += f"{ev['dt'].isoformat(sep=',', timespec='milliseconds', )[:-6]},"
+                        output += f"{ev['dt'].isoformat(sep=',', timespec='milliseconds', )[-6:]},"
+                        output += f"{ev['station']:{maxstation}},"
+                        output += f"{ev['protocol']:3},"
+                        output += f"{ev['engine']:2},"
+                        output += f"{ev['probability']:>0.2f},"
+                        output += f"{ev['disposition'][0]},"
+                        output += f"\"{ev['common_name']}\","
+                        output += f"\"{ev['species_code']}\"\n"
+
 
     if args.timeseries:
         generate_timeseries_graph(events, frequency=5)
