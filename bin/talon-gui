@@ -1062,7 +1062,7 @@ class MyFrame(wx.Frame):
 
         # we can only duplicate one item at a time
         if item_count == 1:
-            dlg = duplicate_dialog(self)
+            dlg = override_dialog(self)
             dlg.set_taxonomy(list(self.taxonomy.values()))
 
             for evt in self.events:
