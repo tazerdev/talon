@@ -183,6 +183,9 @@ def main():
                 print(ts)
                 print()
 
+                print(f"Schedule Detail:")
+                print(f'-' * 66)
+
                 i = 0
 
                 for item in ts:
