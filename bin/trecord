@@ -64,7 +64,7 @@ def record(callback):
 
 def record_post(metadata):
     # we're done, remove the lock
-    if os.path.exists(metadata['wave'] + '.LCK'):
+    if 'wave' in metadata and os.path.exists(metadata['wave'] + '.LCK'):
         if debug:
             print(f"[{dt.now()}] record_post(): Removing {metadata['wave']}")
     
