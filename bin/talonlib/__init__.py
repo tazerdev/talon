@@ -368,7 +368,7 @@ class TalonWAVFile:
                                 chunk['padding'] = padding
                                 chunk['order'] = order
 
-                                if chunk_id == 'fmt ':
+                                if chunk_id == 'fmt ' and chunk_sz > 0:
                                     data = f.read(chunk_sz)
 
                                     # format 1 is PCM, format 3 is IEEE Float
