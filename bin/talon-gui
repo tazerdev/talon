@@ -2385,7 +2385,7 @@ class duplicate_dialog(wx.Dialog):
         sizer_3 = wx.BoxSizer(wx.VERTICAL)
         sizer_1.Add(sizer_3, 1, wx.ALL | wx.EXPAND, 10)
 
-        label_1 = wx.StaticText(self, wx.ID_ANY, "Search for an eBird Common Name:")
+        label_1 = wx.StaticText(self, wx.ID_ANY, "Enter eBird Common Name or Nighthawk Group Code:")
         sizer_3.Add(label_1, 0, wx.ALL, 3)
 
         self.text_ctrl_1 = wx.TextCtrl(self, wx.ID_ANY, "")
