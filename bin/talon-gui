@@ -2319,6 +2319,7 @@ class MyFrame(wx.Frame):
         if result == wx.ID_YES:
             self.Destroy()
         else:
+            event.Veto()
 
     def OnPreferences(self, event):
         dlg = preferences_dialog(self)
