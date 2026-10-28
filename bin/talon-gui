@@ -930,6 +930,10 @@ class MyFrame(wx.Frame):
     def keykandler_letter_a(self):
         if self.audacity_path is not None and os.path.exists(self.audacity_path):
             if self.audioclip and os.path.exists(self.audioclip):
+                # unable to override audacity's export location, this is a shortcoming of audacity
+                # cwd = os.path.dirname(os.path.abspath(self.audioclip))
+                # subprocess.Popen([self.audacity_path, self.audioclip], cwd=cwd)
+
                 subprocess.Popen([self.audacity_path, self.audioclip])
             else:
                 dialog = wx.MessageDialog(
