@@ -461,7 +461,7 @@ def main():
             for section in config:
                 if 'type' in config[section] and config[section]['type'] == 'station':
                     try:
-                        if str(filename).split('_')[0] == section:
+                       if str(os.path.basename(filename)).split('_')[0] == section:
                             last_section = section
                             future = executor.submit(twf_worker, filename, config[section], taxonomy, found_files, args.start)
                     except ValueError as e:
