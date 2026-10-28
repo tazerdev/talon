@@ -1122,6 +1122,13 @@ class TalonSchedule():
 
         self.adawnloc = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._curtz)['dawn'].replace(microsecond=0)
         self.aduskloc = sun(location.observer, date=self._date, dawn_dusk_depression=18, tzinfo=self._curtz)['dusk'].replace(microsecond=0)
+
+        self.ndawnloc = sun(location.observer, date=self._date, dawn_dusk_depression=12, tzinfo=self._curtz)['dawn'].replace(microsecond=0)
+        self.nduskloc = sun(location.observer, date=self._date, dawn_dusk_depression=12, tzinfo=self._curtz)['dusk'].replace(microsecond=0)
+
+        self.cdawnloc = sun(location.observer, date=self._date, dawn_dusk_depression=6, tzinfo=self._curtz)['dawn'].replace(microsecond=0)
+        self.cduskloc = sun(location.observer, date=self._date, dawn_dusk_depression=6, tzinfo=self._curtz)['dusk'].replace(microsecond=0)
+
         self.noonloc = dt.combine(self._date, time(12,0,0)).astimezone(self._curtz).replace(microsecond=0)
         self.midnloc = dt.combine(self._date, time(0,0,0)).astimezone(self._curtz).replace(microsecond=0)
         
@@ -1135,26 +1142,26 @@ class TalonSchedule():
     def __str__(self):
         output = ""
 
-        output += f"Location Details\n"
-        output += f'-' * 58 + '\n'
-        output += f"Name      : {self._name}\n"
+        output += f"Location Detail\n"
+        output += f'-' * 66 + '\n'
+        output += f"Name              : {self._name}\n"
         # output += f"Region    : {self.Region}\n"
-        output += f"TimeZone  : {self._timezone}\n"
-        output += f"Latitude  : {self._latitude}\n"
-        output += f"Longitude : {self._longitude}\n"
-        output += f"Date      : {self._date}\n\n"
+        output += f"Time Zone         : {self._timezone}\n"
+        output += f"Latitude          : {float(self._latitude):12.8f}\n"
+        output += f"Longitude         : {float(self._longitude):12.8f}\n"
+        output += f"Current Time      : {self._date}\n\n"
 
-        output += f"NFC Window:\n"
-        output += f'-' * 58 + '\n'
+        output += f"Twilight Detail:\n"
+        output += f'-' * 66 + '\n'
 
         output += f"Astronomical Dawn : {self.adawnloc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-        output += f"Astronomical Dusk : {self.aduskloc.strftime('%Y%m%d %H:%M:%S %Z')}"
+        output += f"Nautical Dawn     : {self.ndawnloc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Civil Dawn        : {self.cdawnloc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Civil Dusk        : {self.cduskloc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Nautical Dusk     : {self.nduskloc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
+        output += f"Astronomical Dusk : {self.aduskloc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
 
-        if self._debug:
-            output += f"\nAstronomical Dawn : {self.adawnutc.strftime('%Y%m%d %H:%M:%S %Z')}\n"
-            output += f"Astronomical Dusk : {self.aduskutc.strftime('%Y%m%d %H:%M:%S %Z')}"
-
-        return output
+        return output.strip()
 
     def __iter__(self):
         return self
