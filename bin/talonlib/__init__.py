@@ -931,7 +931,7 @@ class TalonWAVFile:
 
                     if chunk['name'] == 'RIFF':
                         header += struct.pack('4s', chunk['name'].encode())
-                        header += struct.pack('<l', chunk['size'])
+                        header += struct.pack('<L', chunk['size'])
                         header += struct.pack('4s', chunk['wavid'].encode())
 
                         o.write(header)
