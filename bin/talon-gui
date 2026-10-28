@@ -1925,6 +1925,7 @@ class MyFrame(wx.Frame):
                 self.chklst_txtctrl.AppendText(output)
                 self.chklst_txtctrl.ShowPosition(0)
 
+    def old_generate_checklists(self, event):
         # TODO: Warning, there's the risk of getting the dates/times wrong
         # as we're blindly casting the datetimes of the events as the time
         # zone supplied in the section. For now it's up to the user to not
@@ -1949,6 +1950,123 @@ class MyFrame(wx.Frame):
                 )
 
                 checklists = []
+
+                # output = "Common Name, Genus, Species, Number, Species Comments, Location Name, Latitude, Longitude, Date, Start Time, State/Province, Country Code, Protocol, Number of Observers, Duration, All observations reported?, Effort Distance Miles, Effort area acres, Submission Comments\n"
+                output = ''
+
+                for window in ts:
+                    if window['start'] > evts[-1]['dt'].astimezone(curtz):
+                        break
+                    else:
+
+                        start = window['start'].replace(microsecond=0)
+                        duration = int((window['stop'].replace(microsecond=0) - start).total_seconds() // 60) # int(td.total_seconds() // 60)
+
+                        if window['protocol'] == 'NFC':
+                            protocol = 'P54'
+                        else:
+                            protocol = window['protocol']
+
+                        species = {}
+
+                        for evt in evts:
+                            if window['start'] <= evt['dt'].astimezone(curtz) < window['stop']:
+                                if evt['disposition'] == 'confirmed':
+                                    name = f"{evt['common_name']}"
+
+                                    if evt['common_name'] == 'new world warbler sp.':
+                                        print(evt['orig_species'])
+
+                                    if name in species:
+                                        species[name] += 1
+                                    else:
+                                        species[name] = 1
+
+                        # win_begin = window['start'] + timedelta(seconds=0)
+                        # win_end = win_begin + timedelta(seconds=30)
+
+                        # while win_end <= window['stop']:
+                        #     print(f"{win_begin}-{win_end}")
+
+                        #     for spec in species:
+                        #         pass
+
+                        #     win_begin = win_end
+                        #     win_end = win_begin + timedelta(seconds=30)
+
+            # evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
+                        comyel = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
+
+                        for com in comyel:
+                            if com['common_name'] == 'Common Yellowthroat':
+                                print(com['dt'], com['common_name'])
+
+                        # stop = window['stop']
+
+                        # test calculating rate
+                        # for spec in species:
+                        #     start = window['start']
+                        #     stop = window['stop']
+                            
+
+                        for name in species:
+                            spec_count = species[name]
+
+                            # make a low count estimate of individuals
+                            if spec_count > 4:
+                                spec_count = int(spec_count // 2)
+                            
+                            if name in ['Barred Owl', 'Canada Goose', 'Great Blue Heron']:
+                                spec_count = 'X'
+                                spec_comment = 'local'
+                            else:
+                                spec_comment = f"NFC {species[name]}"
+
+                            output += f"{name},,,{spec_count},{spec_comment},SDR North and Beaver Pond (Private),{self.latitude},{self.longitude},{start.strftime('%m/%d/%Y')},{start.strftime('%H:%M')},,,{protocol},1,{duration},n,,,\n"
+
+                ckfile = os.path.join(os.getcwd(), f'{os.path.basename(os.getcwd())}-checklists.csv')
+                with open(ckfile, 'w') as f:
+                    f.write(output)
+
+                self.chklst_txtctrl.Clear()
+                self.chklst_txtctrl.AppendText(output)
+                self.chklst_txtctrl.ShowPosition(0)
+
+# Row 1, Column 14: Number of Observers is not a valid integer.
+# Row 1, Column 9: Date Start Time is not a valid date. Examples :6/17/1981 12:45 PM,3/3/1979 14:42,6/6/2006
+
+
+    def old_old_generate_checklists(self, event):
+        # TODO: Warning, there's the risk of getting the dates/times wrong
+        # as we're blindly casting the datetimes of the events as the time
+        # zone supplied in the section. For now it's up to the user to not
+        # mix up events from different locations.
+
+        if self.files:
+            # start at midnight of the date of the first event, just so we
+            # are sure our checklist windows are full hours
+            curtz = ZoneInfo(self.timezone)
+            # evts = sorted(self.events, key=lambda d: d['dt'])
+            evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed']
+
+            if len(evts) > 0:
+                start_date = dt.combine(evts[0]['dt'].date(), dtt(0,0,0)).replace(microsecond=0)
+
+                ts = talonlib.TalonSchedule(
+                    self.latitude,
+                    self.longitude,
+                    self.timezone,
+                    self.section,
+                    start_date
+                )
+
+                checklists = []
+
+                # for window in ts:
+                #     if window['start'] > evts[-1]['dt'].astimezone(curtz):
+                #         break
+                #     else:
+                #         print(window['start'], window['duration'], window['protocol'])
 
                 for window in ts:
                     if window['start'] > evts[-1]['dt'].astimezone(curtz):
