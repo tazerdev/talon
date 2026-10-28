@@ -1833,6 +1833,98 @@ class MyFrame(wx.Frame):
         self.weather_txtctrl.ShowPosition(0)
 
     def generate_checklists(self, event):
+        if self.files:
+            # start at midnight of the date of the first event, just so we
+            # are sure our checklist windows are full hours
+            curtz = ZoneInfo(self.timezone)
+            # evts = sorted(self.events, key=lambda d: d['dt'])
+            evts = [d for d in sorted(self.events, key=lambda d: d['dt']) if d['disposition'] == 'confirmed' and d['protocol'] == 'nfc']
+            
+            if len(evts) > 0:
+                start_date = dt.combine(evts[0]['dt'].date(), dtt(0,0,0)).replace(microsecond=0)
+
+                ts = talonlib.TalonSchedule(
+                    self.latitude,
+                    self.longitude,
+                    self.timezone,
+                    self.section,
+                    start_date
+                )
+
+                checklists = []
+
+                # output = "Common Name, Genus, Species, Number, Species Comments, Location Name, Latitude, Longitude, Date, Start Time, State/Province, Country Code, Protocol, Number of Observers, Duration, All observations reported?, Effort Distance Miles, Effort area acres, Submission Comments\n"
+                output = ''
+
+                for window in ts:
+                    if window['start'] > evts[-1]['dt'].astimezone(curtz):
+                        break
+                    else:
+                        start = window['start'].replace(microsecond=0)
+                        duration = int((window['stop'].replace(microsecond=0) - start).total_seconds() // 60) # int(td.total_seconds() // 60)
+
+                        if window['protocol'] == 'NFC':
+                            protocol = 'P54'
+                        else:
+                            protocol = window['protocol']
+
+                        species = {}
+
+                        for evt in evts:
+                            if window['start'] <= evt['dt'].astimezone(curtz) < window['stop']:
+                                if evt['disposition'] == 'confirmed':
+                                    name = f"{evt['common_name']}"
+
+                                    if name not in species:
+                                        species[name] = {}
+                                        species[name]['nhcodes'] = {}
+                                        species[name]['count'] = 1
+                                    else:
+                                        species[name]['count'] += 1
+
+                                    # we don't want to summarize parulidae or passeriformes in the
+                                    # details/comment field because they're already identified by
+                                    # species (e.g., new world warbler sp., passerine sp.)
+                                    if evt['orig_species'] not in [ 'Parulidae', 'Passeriformes', 'Passerellidae', 'Cardinalidae' ] and evt['engine'] != 'ta':
+                                        if evt['orig_species'] not in species[name]['nhcodes']:
+                                            species[name]['nhcodes'][evt['orig_species']] = 1
+                                        else:
+                                            species[name]['nhcodes'][evt['orig_species']] += 1
+
+                        for name in species:
+                            spec_count = species[name]['count']
+
+                            # make a low count estimate of individuals
+                            # if spec_count > 4:
+                            #     spec_count = int(spec_count // 2)
+                            
+                            if name in ['Barred Owl', 'Great Horned Owl', 'Eastern Screech Owl', 'Canada Goose', 'Great Blue Heron']:
+                                spec_count = 'X'
+                                spec_comment = 'local'
+                            else:
+                                spec_comment = f"NFC {spec_count}"
+
+                                if spec_count > 3:
+                                    spec_count = 'X'
+
+                                if name in ['new world warbler sp.', 'new world sparrow sp.', 'passerine sp.']:
+                                    spec_comment += " |"
+
+                                    for cur in species[name]['nhcodes']:
+                                        spec_comment += f" {cur} {species[name]['nhcodes'][cur]},"
+
+                                    spec_comment = spec_comment[:-1]
+
+                            output += f"\"{name}\",,,{spec_count},\"{spec_comment}\",\"SDR North and Beaver Pond (Private)\",{self.latitude},{self.longitude},{start.strftime('%m/%d/%Y')},{start.strftime('%H:%M')},,,{protocol},1,{duration},n,,,\n"
+
+                ckfile = os.path.join(os.getcwd(), f'{os.path.basename(os.getcwd())}-checklists.csv')
+                with open(ckfile, 'w') as f:
+                    f.write(output)
+
+                self.chklst_txtctrl.Clear()
+                self.chklst_txtctrl.AppendText(output)
+                self.chklst_txtctrl.ShowPosition(0)
+
         # TODO: Warning, there's the risk of getting the dates/times wrong
         # as we're blindly casting the datetimes of the events as the time
         # zone supplied in the section. For now it's up to the user to not
