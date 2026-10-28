@@ -96,6 +96,7 @@ def main():
     arg_parser = ParseCommandLineArguments()
     args = arg_parser.parse_args()
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     # setup some global variables
     global q
